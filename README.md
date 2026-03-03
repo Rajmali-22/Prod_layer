@@ -138,51 +138,69 @@ Access with `Ctrl+Shift+C`:
 ## Project Structure
 
 ```
-PROD_LAYER/
-├── main.js                          # Electron main process
-├── package.json                     # Node dependencies
-├── requirements.txt                 # Python dependencies
-├── .env                             # API keys (not committed)
-├── config.example.env               # Example config
+NXlayer/
+├── main.js                              # Electron main process
+├── package.json                         # Node dependencies
+├── requirements.txt                     # Python dependencies
+├── .env                                 # API keys (not committed)
+├── config.example.env                   # Example config
+│
 ├── src/
-│   ├── main/
-│   │   └── keystore.js              # Encrypted API key storage
-│   ├── python/                      # Python services
-│   │   ├── ai_backend_service.py    # Persistent AI backend with streaming
-│   │   ├── keyboard_inject.py       # Text injection (pynput)
-│   │   ├── screenshot_vision.py     # Vision AI (Gemini)
-│   │   ├── voice_transcribe.py      # Speech recognition
-│   │   ├── smart_prompts.py         # Context-aware prompting
-│   │   ├── human_typer.py           # Human-like code typing
-│   │   ├── keystroke_monitor.py     # Monitor entry point
-│   │   ├── providers/               # Multi-LLM provider system
-│   │   │   ├── __init__.py          # ProviderManager interface
-│   │   │   ├── router.py           # Model routing and discovery
-│   │   │   ├── context.py          # Smart routing logic
-│   │   │   └── memory.py           # Per-window memory management
-│   │   └── keystroke_monitor/       # Monitor package
-│   └── renderer/                    # Electron frontend
-│       ├── lib/
-│       │   └── marked.min.js       # Markdown parser
-│       ├── chat.html               # Persistent chat interface
-│       ├── chat_renderer.js        # Chat window logic
-│       ├── index.html              # Main overlay UI
-│       ├── output.html             # Suggestion popup
-│       ├── explanation.html        # Code explanation window
-│       ├── settings.html           # Settings UI
-│       ├── styles.css              # Styles
-│       ├── renderer.js             # Frontend logic
-│       └── settings_renderer.js    # Settings logic
-├── tests/                           # Test suite
-│   ├── test_ai_backend_service.py  # AI backend tests
-│   ├── test_memory.py              # Memory system tests
-│   ├── test_providers.py           # Provider system tests
-│   └── test_smart_routing.py       # Routing logic tests
-├── tools/                           # Dev and analysis scripts
-├── data/                            # Runtime-generated files
-│   ├── chats/                      # Persistent chat history
-│   └── memory/                     # Per-window conversation memory
-└── docs/                            # Documentation
+│   ├── electron/
+│   │   └── keystore.js                  # Encrypted API key storage
+│   │
+│   ├── services/                        # Python backend services
+│   │   ├── ai/
+│   │   │   ├── backend.py               # Persistent AI backend with streaming
+│   │   │   └── prompts.py               # Context-aware smart prompting
+│   │   ├── providers/                   # Multi-LLM provider system
+│   │   │   ├── __init__.py              # ProviderManager interface
+│   │   │   ├── router.py                # Model routing and discovery
+│   │   │   ├── context.py               # Smart routing logic
+│   │   │   └── memory.py                # Per-window memory management
+│   │   ├── input/
+│   │   │   ├── monitor/                 # Keystroke monitor package
+│   │   │   │   ├── config.py            # Configuration constants
+│   │   │   │   ├── state.py             # Global application state
+│   │   │   │   ├── threads.py           # Background threads
+│   │   │   │   ├── handlers/            # Keystroke & command handlers
+│   │   │   │   └── managers/            # IPC, window, log, live-mode managers
+│   │   │   ├── monitor.py               # Monitor entry point
+│   │   │   ├── injector.py              # Text injection (pynput)
+│   │   │   └── typer.py                 # Human-like code typing
+│   │   └── media/
+│   │       ├── vision.py                # Screenshot + AI vision analysis
+│   │       └── voice.py                 # Speech recognition
+│   │
+│   └── renderer/                        # Electron frontend
+│       ├── overlay/
+│       │   ├── index.html               # Main overlay UI
+│       │   └── index.js                 # Overlay window logic
+│       ├── chat/
+│       │   ├── index.html               # Persistent chat interface
+│       │   └── index.js                 # Chat window logic
+│       ├── settings/
+│       │   ├── index.html               # Settings UI
+│       │   └── index.js                 # Settings logic
+│       ├── output/
+│       │   └── index.html               # Suggestion popup
+│       ├── explanation/
+│       │   └── index.html               # Code explanation window
+│       ├── common/
+│       │   └── styles.css               # Shared styles
+│       └── lib/
+│           └── marked.min.js            # Markdown parser
+│
+├── tests/                               # Test suite
+├── tools/
+│   └── dev/                             # Developer analysis scripts
+│       ├── math_analysis.py
+│       ├── keystroke_analysis.py
+│       └── typer_simulator.py
+├── data/                                # Runtime-generated files
+│   ├── chats/                           # Persistent chat history
+│   └── memory/                          # Per-window conversation memory
+└── docs/                                # Documentation
 ```
 
 ## Requirements
