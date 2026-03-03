@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 const os = require('os');
-const keystore = require(path.join(__dirname, 'src', 'main', 'keystore.js'));
+const keystore = require(path.join(__dirname, 'src', 'electron', 'keystore.js'));
 
 // Use python3 on macOS/Linux, python on Windows (production-friendly)
 function getPythonCommand() {
@@ -209,13 +209,13 @@ function createWindow() {
   const { screen } = require('electron');
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
-  
+
   // Calculate position at bottom center, raised slightly from edge
   const windowWidth = 700;
   const windowHeight = 80;
   const x = Math.floor((width - windowWidth) / 2);
   const y = height - windowHeight - 80;
-  
+
   // Create transparent overlay window
   mainWindow = new BrowserWindow({
     width: windowWidth,
@@ -235,13 +235,13 @@ function createWindow() {
     y: y
   });
 
-  mainWindow.loadFile(path.join('src', 'renderer', 'index.html'));
-  
+  mainWindow.loadFile(path.join('src', 'renderer', 'overlay', 'index.html'));
+
   // Show window initially so user knows it's running
   // User can hide it with Ctrl+Shift+Space
   mainWindow.show();
   isWindowVisible = true;
-  
+
   // Prevent window from being minimized
   mainWindow.setMinimumSize(700, 80);
 
@@ -277,7 +277,7 @@ function createOutputWindow() {
     }
   });
 
-  outputWindow.loadFile(path.join('src', 'renderer', 'output.html'));
+  outputWindow.loadFile(path.join('src', 'renderer', 'output', 'index.html'));
   outputWindow.hide();
 
   applyWindowCaptureAffinity(outputWindow);
@@ -308,7 +308,7 @@ function createExplanationWindow() {
     }
   });
 
-  explanationWindow.loadFile(path.join('src', 'renderer', 'explanation.html'));
+  explanationWindow.loadFile(path.join('src', 'renderer', 'explanation', 'index.html'));
   explanationWindow.hide();
 
   applyWindowCaptureAffinity(explanationWindow);
@@ -359,7 +359,7 @@ function createSettingsWindow() {
     }
   });
 
-  settingsWindow.loadFile(path.join('src', 'renderer', 'settings.html'));
+  settingsWindow.loadFile(path.join('src', 'renderer', 'settings', 'index.html'));
 
   applyWindowCaptureAffinity(settingsWindow);
 
@@ -512,7 +512,7 @@ function createChatWindow() {
     }
   });
 
-  chatWindow.loadFile(path.join('src', 'renderer', 'chat.html'));
+  chatWindow.loadFile(path.join('src', 'renderer', 'chat', 'index.html'));
   applyWindowCaptureAffinity(chatWindow);
 
   chatWindow.on('closed', () => {
@@ -573,7 +573,7 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
 // ============== Keystroke Monitor ==============
 
 function startKeystrokeMonitor() {
-  const pythonScript = path.join(__dirname, 'src', 'python', 'keystroke_monitor.py');
+  const pythonScript = path.join(__dirname, 'src', 'services', 'input', 'monitor.py');
 
   keystrokeMonitor = spawn(getPythonCommand(), [pythonScript], {
     cwd: __dirname,
@@ -665,7 +665,7 @@ function stopKeystrokeMonitor() {
 // ============== AI Backend Service (Persistent) ==============
 
 function startAIBackend() {
-  const pythonScript = path.join(__dirname, 'src', 'python', 'ai_backend_service.py');
+  const pythonScript = path.join(__dirname, 'src', 'services', 'ai', 'backend.py');
 
   // Use cached env (loaded once at startup)
   const env = cachedEnv || process.env;
@@ -1038,7 +1038,7 @@ async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
   text = normalizeTextForInjection(text);
 
   return new Promise((resolve) => {
-    const pythonInjectPath = path.join(__dirname, 'src', 'python', 'keyboard_inject.py');
+    const pythonInjectPath = path.join(__dirname, 'src', 'services', 'input', 'injector.py');
 
     // Escape text for Python (will be unescaped by keyboard_inject.py)
     let escapedText = text
@@ -1248,7 +1248,7 @@ async function processVisionAnalysis(instruction) {
   await new Promise(resolve => setTimeout(resolve, 200));
 
   // Call Python script for screenshot + vision
-  const pythonScript = path.join(__dirname, 'src', 'python', 'screenshot_vision.py');
+  const pythonScript = path.join(__dirname, 'src', 'services', 'media', 'vision.py');
 
   try {
     const instructionJson = JSON.stringify(instruction || '');
@@ -1725,7 +1725,7 @@ function startVoiceRecording() {
   }
 
   // Start Python recording (saves to temp file)
-  const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
+  const pythonScript = path.join(__dirname, 'src', 'services', 'media', 'voice.py');
   voiceProcess = spawn(getPythonCommand(), [pythonScript, '--record'], {
     cwd: __dirname
   });
@@ -1830,7 +1830,7 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
     // Use the streaming backend
     const mode = context?.mode || 'prompt';
     const extraParam = mode === 'extension' ? context?.last_output :
-                       mode === 'clipboard_with_instruction' ? context?.instruction : null;
+      mode === 'clipboard_with_instruction' ? context?.instruction : null;
 
     const result = await generateTextStreaming(mode, prompt, extraParam, true); // autoInject=true to skip streaming UI
     return result;
@@ -2291,7 +2291,7 @@ ipcMain.handle('transcribe-audio', async (event, options = {}) => {
     const timeout = options.timeout || 10;
     const phraseTimeout = options.phraseTimeout || 5;
 
-    const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
+    const pythonScript = path.join(__dirname, 'src', 'services', 'media', 'voice.py');
 
     const pythonProcess = spawn(getPythonCommand(), [pythonScript, '--live', timeout.toString(), phraseTimeout.toString()], {
       cwd: __dirname
@@ -2338,16 +2338,16 @@ ipcMain.handle('type-text', async (event, text) => {
     if (outputWindow) {
       outputWindow.hide();
     }
-    
+
     // Small delay to ensure focus is on the target application
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Always use clipboard paste method (much faster than typing)
     clipboard.writeText(text);
-    
+
     // Small delay to ensure clipboard is ready
     await new Promise(resolve => setTimeout(resolve, 50));
-    
+
     if (robot) {
       // Simulate Ctrl+V to paste instantly
       try {
@@ -2361,20 +2361,20 @@ ipcMain.handle('type-text', async (event, text) => {
         };
       }
     } else {
-      return { 
-        success: true, 
+      return {
+        success: true,
         method: 'clipboard',
-        message: 'Text copied to clipboard. Press Ctrl+V to paste.' 
+        message: 'Text copied to clipboard. Press Ctrl+V to paste.'
       };
     }
   } catch (error) {
     // Last resort: copy to clipboard
     try {
       clipboard.writeText(text);
-      return { 
-        success: true, 
+      return {
+        success: true,
         method: 'clipboard-fallback',
-        message: 'Text copied to clipboard. Press Ctrl+V to paste.' 
+        message: 'Text copied to clipboard. Press Ctrl+V to paste.'
       };
     } catch (clipError) {
       return { success: false, error: error.message };

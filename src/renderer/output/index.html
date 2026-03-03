@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suggestion</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: rgba(20, 20, 22, 0.60);
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .suggestion-box {
+            display: flex;
+            flex-direction: column;
+            max-height: 100vh;
+        }
+
+        .vision-input-container {
+            display: none;
+            padding: 8px 10px;
+        }
+
+        .vision-input-container.active {
+            display: block;
+        }
+
+        .vision-label {
+            color: #4fc3f7;
+            font-size: 11px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .vision-icon {
+            font-size: 14px;
+        }
+
+        #vision-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 8px 10px;
+            color: rgba(220, 220, 220, 0.95);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            resize: none;
+        }
+
+        #vision-input:focus {
+            border-color: #4fc3f7;
+        }
+
+        #vision-input::placeholder {
+            color: rgba(150, 150, 150, 0.7);
+        }
+
+        .vision-status {
+            color: rgba(150, 150, 150, 0.8);
+            font-size: 11px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .vision-status.loading {
+            display: block;
+            color: #4fc3f7;
+        }
+
+        .suggestion-text {
+            padding: 8px 10px;
+            color: rgba(200, 200, 200, 0.95);
+            font-size: 13px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+            max-height: calc(100vh - 28px);
+        }
+
+        .suggestion-text:empty {
+            display: none;
+        }
+
+        .suggestion-text.streaming::after {
+            content: '▋';
+            animation: blink 0.7s infinite;
+            color: #4fc3f7;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .suggestion-text::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .suggestion-text::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .suggestion-text::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 3px;
+        }
+
+        .suggestion-text::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .hint-bar {
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hint {
+            color: rgba(150, 150, 150, 0.9);
+            font-size: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        kbd {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-family: inherit;
+            font-size: 10px;
+            color: #4fc3f7;
+        }
+
+        .esc {
+            color: rgba(120, 120, 120, 0.8);
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="suggestion-box">
+        <div id="vision-input-container" class="vision-input-container">
+            <div class="vision-label">
+                <span class="vision-icon">📷</span>
+                <span>Screenshot Vision - What do you want to know?</span>
+            </div>
+            <input type="text" id="vision-input" placeholder="e.g., extract the code, summarize this, fix the error... (Enter to analyze)">
+            <div id="vision-status" class="vision-status">Analyzing screenshot...</div>
+        </div>
+        <div id="suggestion-text" class="suggestion-text"></div>
+        <div class="hint-bar">
+            <span id="hint-text" class="hint"><kbd>Ctrl+Shift+P</kbd> paste</span>
+            <span class="esc">Esc close</span>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        const suggestionText = document.getElementById('suggestion-text');
+        const visionInputContainer = document.getElementById('vision-input-container');
+        const visionInput = document.getElementById('vision-input');
+        const visionStatus = document.getElementById('vision-status');
+        const hintText = document.getElementById('hint-text');
+
+        let isVisionMode = false;
+
+        // Show vision input mode
+        ipcRenderer.on('vision-mode', (event) => {
+            isVisionMode = true;
+            visionInputContainer.classList.add('active');
+            suggestionText.textContent = '';
+            visionInput.value = '';
+            visionStatus.classList.remove('loading');
+            hintText.innerHTML = '<kbd>Enter</kbd> analyze';
+            setTimeout(() => visionInput.focus(), 100);
+        });
+
+        // Listen for text to display (full text, non-streaming)
+        ipcRenderer.on('display-text', (event, text) => {
+            isVisionMode = false;
+            visionInputContainer.classList.remove('active');
+            visionStatus.classList.remove('loading');
+            visionInput.disabled = false;
+            suggestionText.textContent = text;
+            suggestionText.classList.remove('streaming');
+            hintText.innerHTML = '<kbd>Ctrl+Shift+P</kbd> paste';
+        });
+
+        // Streaming support - start streaming
+        ipcRenderer.on('stream-start', (event) => {
+            isVisionMode = false;
+            visionInputContainer.classList.remove('active');
+            suggestionText.textContent = '';
+            suggestionText.classList.add('streaming');
+            hintText.innerHTML = '<span style="color:#4fc3f7">generating...</span>';
+        });
+
+        // Streaming support - receive chunk
+        ipcRenderer.on('stream-chunk', (event, chunk) => {
+            suggestionText.textContent += chunk;
+            // Auto-scroll to bottom
+            suggestionText.scrollTop = suggestionText.scrollHeight;
+        });
+
+        // Streaming support - end streaming
+        ipcRenderer.on('stream-end', (event) => {
+            suggestionText.classList.remove('streaming');
+            hintText.innerHTML = '<kbd>Ctrl+Shift+P</kbd> paste';
+        });
+
+        // Vision input Enter key
+        visionInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const instruction = visionInput.value.trim();
+                visionStatus.classList.add('loading');
+                visionInput.disabled = true;
+                ipcRenderer.invoke('vision-analyze', instruction);
+            }
+        });
+
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ipcRenderer.invoke('hide-output');
+            }
+        });
+    </script>
+</body>
+</html>
+

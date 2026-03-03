@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Prod_Layer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: rgba(28, 28, 30, 0.75);
+            --bg-secondary: rgba(255, 255, 255, 0.16);
+            --bg-hover: rgba(255, 255, 255, 0.22);
+            --border-color: rgba(255, 255, 255, 0.20);
+            --bg-surface: rgba(44, 44, 46, 0.92);
+            --text-primary: rgba(255, 255, 255, 0.95);
+            --text-secondary: rgba(255, 255, 255, 0.55);
+            --toggle-bg: rgba(120, 120, 128, 0.32);
+            --toggle-active: #34c759;
+            --accent-color: #007aff;
+            --success-color: #34c759;
+            --warning-color: #ff9500;
+            --error-color: #ff3b30;
+        }
+
+        body.light-mode {
+            --bg-primary: rgba(255, 255, 255, 0.78);
+            --bg-secondary: rgba(0, 0, 0, 0.14);
+            --bg-hover: rgba(0, 0, 0, 0.20);
+            --border-color: rgba(0, 0, 0, 0.20);
+            --bg-surface: rgba(255, 255, 255, 0.96);
+            --text-primary: rgba(0, 0, 0, 0.88);
+            --text-secondary: rgba(0, 0, 0, 0.5);
+            --toggle-bg: rgba(120, 120, 128, 0.2);
+            --accent-color: #007aff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            color: var(--text-primary);
+            user-select: none;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .settings-container {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            background: var(--bg-primary);
+            backdrop-filter: blur(50px) saturate(180%);
+            -webkit-backdrop-filter: blur(50px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .settings-header {
+            flex-shrink: 0;
+            padding: 14px 20px 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-title {
+            font-size: 17px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        .close-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: var(--bg-secondary);
+            border-radius: 50%;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.15s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+        }
+
+        /* Main content area — no scroll */
+        .settings-main {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .settings-sidebar {
+            flex-shrink: 0;
+            width: 160px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            padding: 12px 0;
+            overflow: hidden;
+        }
+
+        .sidebar-nav {
+            list-style: none;
+        }
+
+        .sidebar-item {
+            padding: 10px 16px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .sidebar-item.active {
+            background: rgba(0, 122, 255, 0.15);
+            color: var(--accent-color);
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .sidebar-item i {
+            font-size: 16px;
+        }
+
+        /* Content — no scroll, fill available height */
+        .settings-content {
+            flex: 1;
+            min-height: 0;
+            padding: 16px 20px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-content .section {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .settings-content .section.active-section {
+            display: flex;
+        }
+
+        /* Section styling */
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .section-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+
+        /* Setting items — compact */
+        .setting-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .setting-item:hover {
+            background: var(--bg-hover);
+            border-color: rgba(0, 122, 255, 0.2);
+        }
+
+        .settings-content .section .section-body {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .setting-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .setting-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .setting-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Toggle Switch - enhanced */
+        .toggle {
+            position: relative;
+            width: 52px;
+            height: 32px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            display: none;
+        }
+
+        .toggle-track {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--toggle-bg);
+            border-radius: 16px;
+            transition: all 0.25s ease;
+        }
+
+        .toggle input:checked + .toggle-track {
+            background: var(--accent-color);
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: all 0.25s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle input:checked ~ .toggle-thumb {
+            transform: translateX(20px);
+        }
+
+        /* Provider section — compact, no scroll */
+        .provider-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .provider-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .provider-card {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: all 0.15s ease;
+        }
+
+        .provider-card:hover {
+            background: var(--bg-hover);
+        }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .provider-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .provider-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .status-badge {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .status-badge.active {
+            background: var(--success-color);
+        }
+
+        .status-badge.inactive {
+            background: var(--text-secondary);
+        }
+
+        /* Enhanced buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: rgba(0, 122, 255, 0.9);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            border-color: rgba(0, 122, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(255, 59, 48, 0.15);
+            color: #ff3b30;
+            border: 1px solid rgba(255, 59, 48, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 59, 48, 0.25);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .test-btn, .remove-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .test-btn:hover, .remove-btn:hover {
+            background: var(--bg-hover);
+        }
+
+        .remove-btn {
+            padding: 2px 8px;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .test-btn.pass { color: var(--success-color); }
+        .test-btn.fail { color: var(--error-color); }
+
+        /* Input fields */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .key-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .key-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+        }
+
+        .dropdown {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%23777" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 16px;
+        }
+
+        .dropdown:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* Status messages */
+        .status-message {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .status-success {
+            background: rgba(52, 199, 89, 0.1);
+            color: var(--success-color);
+        }
+
+        .status-error {
+            background: rgba(255, 59, 48, 0.1);
+            color: var(--error-color);
+        }
+
+        .status-info {
+            background: rgba(0, 122, 255, 0.1);
+            color: var(--accent-color);
+        }
+
+        /* Footer */
+        .settings-footer {
+            flex-shrink: 0;
+            padding: 10px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .footer-shortcut {
+            background: var(--bg-secondary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+        }
+
+        .version-info {
+            display: flex;
+            gap: 16px;
+        }
+
+        .add-key-row {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr auto auto;
+            gap: 8px;
+            align-items: end;
+        }
+
+        .add-key-row .input-group {
+            margin: 0;
+        }
+
+        .add-key-row .input-label {
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .add-key-row .key-input, .add-key-row .dropdown {
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .add-key-row .btn-sm {
+            padding: 6px 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <!-- Header -->
+        <div class="settings-header">
+            <div class="settings-title">Settings</div>
+            <button class="close-btn" id="close-btn">×</button>
+        </div>
+
+        <!-- Main content -->
+        <div class="settings-main">
+            <!-- Sidebar -->
+            <nav class="settings-sidebar">
+                <ul class="sidebar-nav">
+                    <li class="sidebar-item active" data-section="general">
+                        <span>System</span>
+                    </li>
+                    <li class="sidebar-item" data-section="appearance">
+                        <span>Interface</span>
+                    </li>
+                    <li class="sidebar-item" data-section="behavior">
+                        <span>Assistant Behavior</span>
+                    </li>
+                    <li class="sidebar-item" data-section="providers">
+                        <span>AI Providers</span>
+                    </li>
+                    <li class="sidebar-item" data-section="interview">
+                        <span>Coding Mode</span>
+                    </li>
+                    <li class="sidebar-item" data-section="about">
+                        <span>About & Version</span>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Content -->
+            <main class="settings-content">
+                <!-- General Section -->
+                <div id="general-section" class="section active-section">
+                    <h2 class="section-title">System Settings</h2>
+                    <p class="section-description">Global controls for the assistant</p>
+                    <div class="section-body">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">AI Assistant</span>
+                                <span class="setting-desc">Enable all AI features globally</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="master-toggle" checked>
+                                <div class="toggle-track"></div>
+                                <div class="toggle-thumb"></div>
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Ghost Mode</span>
+                                <span class="setting-desc">On: hidden in screen share (Meet, Zoom). Off: visible so you can show Prod_Layer in meetings.</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="ghost-mode-toggle" checked>
+                                <div class="toggle-track"></div>
+                                <div class="toggle-thumb"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appearance Section -->
+                <div id="appearance-section" class="section">
+                    <h2 class="section-title">Interface & Theme</h2>
+                    <p class="section-description">Layout, theme, and visual density</p>
+                    <div class="section-body">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Dark Mode</span>
+                                <span class="setting-desc">Use dark theme</span>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="dark-mode-toggle" checked>
+                                <div class="toggle-track"></div>
+                                <div class="toggle-thumb"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Behavior Section -->
+                <div id="behavior-section" class="section">
+                    <h2 class="section-title">Assistant Behavior</h2>
+                    <p class="section-description">Response style and automation</p>
+                    <div class="section-body">
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Human-like Typing</span>
+                                    <span class="setting-desc">Natural speed variation</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="humanize-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Auto Inject</span>
+                                    <span class="setting-desc">Skip popup, inject directly</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="auto-inject-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Live Mode</span>
+                                    <span class="setting-desc">Auto-suggest on pause</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="live-mode-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Providers Section -->
+                <div id="providers-section" class="section">
+                    <h2 class="section-title">Model Providers</h2>
+                    <p class="section-description">Default model routing and API keys</p>
+                    <div class="section-body provider-section">
+                        <div class="setting-item" style="margin-bottom: 10px;">
+                            <div class="setting-info">
+                                <span class="setting-label">Default Provider</span>
+                                <span class="setting-desc">Preferred AI model</span>
+                            </div>
+                            <select id="default-provider" class="dropdown" style="min-width: 160px;">
+                                <option value="auto">Auto (Smart Routing)</option>
+                            </select>
+                        </div>
+                        <div id="provider-cards" class="provider-cards-grid"></div>
+                        <div class="add-key-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color);">
+                            <div class="input-group">
+                                <label class="input-label">Provider</label>
+                                <select id="new-key-provider" class="dropdown">
+                                    <option value="">Select...</option>
+                                    <option value="GROQ_API_KEY">Groq</option>
+                                    <option value="MISTRAL_API_KEY">Mistral</option>
+                                    <option value="DEEPSEEK_API_KEY">DeepSeek</option>
+                                    <option value="ANTHROPIC_API_KEY">Anthropic</option>
+                                    <option value="OPENAI_API_KEY">OpenAI</option>
+                                    <option value="GEMINI_API_KEY">Gemini</option>
+                                    <option value="XAI_API_KEY">xAI</option>
+                                    <option value="TOGETHERAI_API_KEY">Together AI</option>
+                                    <option value="PERPLEXITYAI_API_KEY">Perplexity</option>
+                                    <option value="COHERE_API_KEY">Cohere</option>
+                                    <option value="REPLICATE_API_TOKEN">Replicate</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">API Key</label>
+                                <input type="password" id="new-key-input" class="key-input" placeholder="Paste key...">
+                            </div>
+                            <button id="save-key-btn" class="btn btn-primary btn-sm">Save</button>
+                            <button id="cancel-key-btn" class="btn btn-secondary btn-sm">Cancel</button>
+                            <div id="key-status" class="status-message" style="grid-column: 1 / -1; font-size: 11px; margin-top: 4px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interview Section -->
+                <div id="interview-section" class="section">
+                    <h2 class="section-title">Coding Interview Mode</h2>
+                    <p class="section-description">Environment and behavior for interview practice</p>
+                    <div class="section-body">
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Coding Mode</span>
+                                    <span class="setting-desc">Code + explanation windows</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="coding-mode-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Ultra Human Typing</span>
+                                    <span class="setting-desc">Chain-of-thought injection</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="ultra-human-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- About Section -->
+                <div id="about-section" class="section">
+                    <h2 class="section-title">About & Version</h2>
+                    <p class="section-description">Prod_Layer build information</p>
+                    <div class="section-body">
+                        <div class="provider-card" style="flex-direction: column; align-items: flex-start;">
+                            <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 12px;">
+                                <span style="color: var(--text-secondary);">Version</span><span>1.0.0</span>
+                                <span style="color: var(--text-secondary);">License</span><span>MIT</span>
+                                <span style="color: var(--text-secondary);">GitHub</span><span style="color: var(--accent-color);">Rajmali-22/Prod_layer</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <div class="settings-footer">
+            <div class="footer-shortcut">Ctrl + Shift + P to inject</div>
+            <div class="version-info">
+                <span>Prod_Layer v1.0.0</span>
+                <span>© 2024 Rajmali-22</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+</body>
+</html>
+
