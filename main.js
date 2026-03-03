@@ -361,8 +361,7 @@ function createSettingsWindow() {
 
   settingsWindow.loadFile(path.join('src', 'renderer', 'settings.html'));
 
-  // Exclude from screen capture (invisible in Meet/Zoom when sharing)
-  setWindowExcludeFromCapture(settingsWindow);
+  applyWindowCaptureAffinity(settingsWindow);
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;

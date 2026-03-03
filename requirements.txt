@@ -2,6 +2,8 @@
 # Pinned versions for reproducible builds
 
 # AI Provider (unified multi-provider access)
+# LiteLLM requires openai>=1.0.0 (uses openai._models)
+openai>=1.0.0
 litellm>=1.40.0
 
 # Conversation Memory
