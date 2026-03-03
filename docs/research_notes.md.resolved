@@ -1,0 +1,51 @@
+# Research Notes: GhostType Project
+
+## Overview
+**GhostType** is a sophisticated, AI-powered stealth typing assistant designed to simulate human-like coding patterns. It utilizes a hybrid architecture combining the UI capabilities of Electron with the powerful AI and system automation libraries of Python.
+
+---
+
+## Technical Architecture
+
+### 1. Hybrid Frontend/Backend
+- **Frontend (Electron/JS)**: Coordinates the multi-window interface (Main, Output, Explanation, Settings, Chat).
+- **Backend (Python)**:
+  - [ai_backend_service.py](file:///c:/Users/rajma/Desktop/zenth/NXlayer/src/python/ai_backend_service.py): Manages LLM interactions via `litellm`.
+  - [human_typer.py](file:///c:/Users/rajma/Desktop/zenth/NXlayer/src/python/human_typer.py): Sophisticated semantic code injection.
+  - [keystroke_monitor.py](file:///c:/Users/rajma/Desktop/zenth/NXlayer/src/python/keystroke_monitor.py): Real-time input monitoring.
+- **IPC**: Robust JSON-based communication over `stdin`/`stdout`.
+
+### 2. Core Logic Highlights
+- **Human-Like Simulation**: The `human_typer` doesn't just dump text. It tracks code structure (Position Tracking) and follows developer workflows (Skeleton -> Helpers -> Implementation). It includes randomized delays, typos, and thinking pauses.
+- **Resilient AI Layer**: Multi-provider support with automated fallbacks (e.g., failing over from OpenAI to Anthropic or Groq on rate limits or auth errors).
+- **Stealth Features**: Implements `SetWindowDisplayAffinity` (via `koffi` FFI) to hide the application from screen capture software (Zoom, Teams, Meet).
+
+---
+
+## Identified Good Qualities
+
+### 1. Advanced Stealth & Privacy
+- **Capture Affinity**: Proactive use of Windows native APIs to exclude windows from capture.
+- **Stealth Injection**: Instead of copy-pasting, it types into the active window, making it indistinguishable from manual input to most observation tools.
+
+### 2. High Resilience & Availability
+- **Provider Fallback**: Sophisticated error handling for AI APIs. It doesn't just error out; it tries other models/providers automatically.
+- **Process Management**: Electron main process monitors and restarts Python sub-processes if they crash unexpectedy.
+
+### 3. Sophisticated Logic & Workflow
+- **Semantic Awareness**: The system understands the difference between an 'import', a 'function definition', and 'function body', allowing for logical code placement.
+- **Context Management**: Maintains conversation history across different windows and modes (Cross-model memory).
+
+### 4. Professional UI/UX
+- **Multi-Window Strategy**: Context-specific windows (e.g., an 'explanation' window for interview preparation) provide a rich information layer without cluttering the main editor.
+- **Glassmorphism/Modern Aesthetics**: Inferred from the use of transparency and specific window positioning in [main.js](file:///c:/Users/rajma/Desktop/zenth/NXlayer/main.js).
+
+### 5. Robust Security
+- **Encrypted Keystore**: Managed API keys aren't just in [.env](file:///c:/Users/rajma/Desktop/zenth/NXlayer/.env); they are handled through a dedicated [keystore.js](file:///c:/Users/rajma/Desktop/zenth/NXlayer/src/main/keystore.js) module (likely encrypted).
+
+---
+
+## Project Structure Good Practices
+- **Separation of Concerns**: Clear folder structure (`src/main`, `src/renderer`, `src/python`).
+- **Low-Level Native Integration**: Uses `koffi`, `robotjs`, and `uiohook-napi` for high-performance system-level interaction.
+- **Pinned Dependencies**: `requirements.txt` specifies exact versions for reproducibility.

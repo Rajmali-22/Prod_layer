@@ -178,8 +178,7 @@ PROD_LAYER/
 │   ├── test_memory.py              # Memory system tests
 │   ├── test_providers.py           # Provider system tests
 │   └── test_smart_routing.py       # Routing logic tests
-├── tools/                           # Dev/analysis scripts
-│   └── locomo/                      # Research tools
+├── tools/                           # Dev and analysis scripts
 ├── data/                            # Runtime-generated files
 │   ├── chats/                      # Persistent chat history
 │   └── memory/                     # Per-window conversation memory

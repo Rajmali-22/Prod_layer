@@ -12,10 +12,11 @@
         }
 
         :root {
-            --bg-primary: rgba(28, 28, 30, 0.30);
-            --bg-secondary: rgba(255, 255, 255, 0.08);
-            --bg-hover: rgba(255, 255, 255, 0.12);
-            --border-color: rgba(255, 255, 255, 0.12);
+            --bg-primary: rgba(28, 28, 30, 0.75);
+            --bg-secondary: rgba(255, 255, 255, 0.16);
+            --bg-hover: rgba(255, 255, 255, 0.22);
+            --border-color: rgba(255, 255, 255, 0.20);
+            --bg-surface: rgba(44, 44, 46, 0.92);
             --text-primary: rgba(255, 255, 255, 0.95);
             --text-secondary: rgba(255, 255, 255, 0.55);
             --toggle-bg: rgba(120, 120, 128, 0.32);
@@ -27,10 +28,11 @@
         }
 
         body.light-mode {
-            --bg-primary: rgba(255, 255, 255, 0.30);
-            --bg-secondary: rgba(0, 0, 0, 0.06);
-            --bg-hover: rgba(0, 0, 0, 0.08);
-            --border-color: rgba(0, 0, 0, 0.12);
+            --bg-primary: rgba(255, 255, 255, 0.78);
+            --bg-secondary: rgba(0, 0, 0, 0.14);
+            --bg-hover: rgba(0, 0, 0, 0.20);
+            --border-color: rgba(0, 0, 0, 0.20);
+            --bg-surface: rgba(255, 255, 255, 0.96);
             --text-primary: rgba(0, 0, 0, 0.88);
             --text-secondary: rgba(0, 0, 0, 0.5);
             --toggle-bg: rgba(120, 120, 128, 0.2);
@@ -111,7 +113,7 @@
         .settings-sidebar {
             flex-shrink: 0;
             width: 160px;
-            background: var(--bg-secondary);
+            background: var(--bg-surface);
             border-right: 1px solid var(--border-color);
             padding: 12px 0;
             overflow: hidden;
@@ -193,7 +195,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 10px 14px;
-            background: var(--bg-secondary);
+            background: var(--bg-surface);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             margin-bottom: 8px;
@@ -305,7 +307,7 @@
             justify-content: space-between;
             gap: 8px;
             padding: 8px 12px;
-            background: var(--bg-secondary);
+            background: var(--bg-surface);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             transition: all 0.15s ease;
@@ -403,7 +405,7 @@
             font-size: 11px;
             border-radius: 6px;
             border: 1px solid var(--border-color);
-            background: var(--bg-secondary);
+            background: var(--bg-surface);
             color: var(--text-primary);
             cursor: pointer;
             transition: all 0.15s ease;
@@ -460,7 +462,7 @@
         .dropdown {
             width: 100%;
             padding: 10px 14px;
-            background: var(--bg-secondary);
+            background: var(--bg-surface);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             color: var(--text-primary);
@@ -566,22 +568,22 @@
             <nav class="settings-sidebar">
                 <ul class="sidebar-nav">
                     <li class="sidebar-item active" data-section="general">
-                        <i>⚙️</i><span>General</span>
+                        <span>System</span>
                     </li>
                     <li class="sidebar-item" data-section="appearance">
-                        <i>🎨</i><span>Appearance</span>
+                        <span>Interface</span>
                     </li>
                     <li class="sidebar-item" data-section="behavior">
-                        <i>🤖</i><span>Behavior</span>
+                        <span>Assistant Behavior</span>
                     </li>
                     <li class="sidebar-item" data-section="providers">
-                        <i>🔌</i><span>Providers</span>
+                        <span>AI Providers</span>
                     </li>
                     <li class="sidebar-item" data-section="interview">
-                        <i>💻</i><span>Interview</span>
+                        <span>Coding Mode</span>
                     </li>
                     <li class="sidebar-item" data-section="about">
-                        <i>ℹ️</i><span>About</span>
+                        <span>About & Version</span>
                     </li>
                 </ul>
             </nav>
@@ -590,8 +592,8 @@
             <main class="settings-content">
                 <!-- General Section -->
                 <div id="general-section" class="section active-section">
-                    <h2 class="section-title">General</h2>
-                    <p class="section-description">Master controls</p>
+                    <h2 class="section-title">System Settings</h2>
+                    <p class="section-description">Global controls for the assistant</p>
                     <div class="section-body">
                         <div class="setting-item">
                             <div class="setting-info">
@@ -620,8 +622,8 @@
 
                 <!-- Appearance Section -->
                 <div id="appearance-section" class="section">
-                    <h2 class="section-title">Appearance</h2>
-                    <p class="section-description">Look and feel</p>
+                    <h2 class="section-title">Interface & Theme</h2>
+                    <p class="section-description">Layout, theme, and visual density</p>
                     <div class="section-body">
                         <div class="setting-item">
                             <div class="setting-info">
@@ -639,8 +641,8 @@
 
                 <!-- Behavior Section -->
                 <div id="behavior-section" class="section">
-                    <h2 class="section-title">Behavior</h2>
-                    <p class="section-description">How AI responds</p>
+                    <h2 class="section-title">Assistant Behavior</h2>
+                    <p class="section-description">Response style and automation</p>
                     <div class="section-body">
                         <div class="settings-grid">
                             <div class="setting-item">
@@ -682,8 +684,8 @@
 
                 <!-- Providers Section -->
                 <div id="providers-section" class="section">
-                    <h2 class="section-title">AI Providers</h2>
-                    <p class="section-description">Default model and API keys</p>
+                    <h2 class="section-title">Model Providers</h2>
+                    <p class="section-description">Default model routing and API keys</p>
                     <div class="section-body provider-section">
                         <div class="setting-item" style="margin-bottom: 10px;">
                             <div class="setting-info">
@@ -726,8 +728,8 @@
 
                 <!-- Interview Section -->
                 <div id="interview-section" class="section">
-                    <h2 class="section-title">Interview Mode</h2>
-                    <p class="section-description">Coding interview options</p>
+                    <h2 class="section-title">Coding Interview Mode</h2>
+                    <p class="section-description">Environment and behavior for interview practice</p>
                     <div class="section-body">
                         <div class="settings-grid">
                             <div class="setting-item">
@@ -758,8 +760,8 @@
 
                 <!-- About Section -->
                 <div id="about-section" class="section">
-                    <h2 class="section-title">About</h2>
-                    <p class="section-description">Prod_Layer</p>
+                    <h2 class="section-title">About & Version</h2>
+                    <p class="section-description">Prod_Layer build information</p>
                     <div class="section-body">
                         <div class="provider-card" style="flex-direction: column; align-items: flex-start;">
                             <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 12px;">
