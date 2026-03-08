@@ -4,8 +4,7 @@ A **productive layer** deployed on any OS. Integrated with all AI, **core memory
 
 ## Future of Work & Productivity
 
-Prod_Layer is a single layer that runs everywhere you work: browser, IDE, email. It plugs into **all major AI providers** with one config, keeps **core memory** so context is never lost, and lets you **switch models mid-context** (fast / powerful / reasoning) by task. Get **seamless access to AI and information**, **do tasks in one go**, and **save your toggle tax**—no more jumping between tabs. Overlays stay **invisible in screen share** (Meet, Zoom, Teams). See **[HACKATHON.md](HACKATHON.md)** for the full submission and demo script.
-
+Prod_Layer is a single layer that runs everywhere you work: browser, IDE, email. It plugs into **all major AI providers** with one config, keeps **core memory** so context is never lost, and lets you **switch models mid-context** (fast / powerful / reasoning) by task. Get **seamless access to AI and information**, **do tasks in one go**, and **save your toggle tax**—no more jumping between tabs. Overlays stay **invisible in screen share** (Meet, Zoom, Teams).
 ## Features
 
 - **Smart AI Responses** - Auto-detects code problems, definitions, questions, and instructions
@@ -212,7 +211,45 @@ NXlayer/
 
 ## API Keys
 
-Create `.env` file with your API keys. Prod_Layer supports 12+ providers:
+Create `.env` file with your API keys. Prod_Layer supports 12+ providers. Keys can also be configured through the Settings UI (`Ctrl+Shift+S`).
+
+### All Agents & API Key Links
+
+#### Fast Models
+
+| Agent | Env var | Get API key |
+|-------|---------|-------------|
+| **Groq Llama 3.3 70B** | `GROQ_API_KEY` | https://console.groq.com/keys |
+| **Mistral Small** | `MISTRAL_API_KEY` | https://console.mistral.ai/api-keys/ |
+| **GPT-4o Mini** | `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
+| **Gemini 2.0 Flash** | `GEMINI_API_KEY` | https://aistudio.google.com/apikey |
+
+#### Powerful Models
+
+| Agent | Env var | Get API key |
+|-------|---------|-------------|
+| **DeepSeek Chat** | `DEEPSEEK_API_KEY` | https://platform.deepseek.com/api_keys |
+| **Claude Sonnet** | `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
+| **GPT-4o** | `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
+| **Grok 2** | `XAI_API_KEY` | https://console.x.ai/ |
+| **Together Llama 3.3 70B** | `TOGETHERAI_API_KEY` | https://api.together.xyz/settings/api-keys |
+| **Perplexity Sonar Pro** | `PERPLEXITYAI_API_KEY` | https://www.perplexity.ai/settings/api |
+| **Cohere Command R+** | `COHERE_API_KEY` | https://dashboard.cohere.com/api-keys |
+| **Replicate Llama 405B** | `REPLICATE_API_TOKEN` | https://replicate.com/account/api-tokens |
+
+#### Reasoning Models
+
+| Agent | Env var | Get API key |
+|-------|---------|-------------|
+| **DeepSeek Reasoner** | `DEEPSEEK_API_KEY` | https://platform.deepseek.com/api_keys |
+
+#### Vision (Screenshots)
+
+| Provider | Env var | Get API key |
+|----------|---------|-------------|
+| **Google / Gemini Vision** | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | https://aistudio.google.com/apikey |
+
+### Example `.env`
 
 ```env
 # Primary providers
@@ -231,20 +268,6 @@ COHERE_API_KEY=your-cohere-key
 REPLICATE_API_TOKEN=your-replicate-token
 GOOGLE_API_KEY=your-google-key
 ```
-
-Get keys from:
-- **Mistral**: https://console.mistral.ai/api-keys/
-- **Groq**: https://console.groq.com/keys
-- **DeepSeek**: https://platform.deepseek.com/api-keys
-- **Anthropic**: https://console.anthropic.com/settings/keys
-- **OpenAI**: https://platform.openai.com/api-keys
-- **Gemini**: https://makersuite.google.com/app/apikey
-- **Together AI**: https://www.together.ai/
-- **Perplexity**: https://www.perplexity.ai/
-- **Cohere**: https://dashboard.cohere.com/api-keys
-- **Replicate**: https://replicate.com/account
-
-Keys can also be configured through the Settings UI (`Ctrl+Shift+S`).
 
 ## Troubleshooting
 

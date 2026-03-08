@@ -81,6 +81,7 @@ let aiBackend = null;
 let aiBackendRL = null;
 let pendingAIRequest = null;  // { resolve, reject, streaming, text }
 let aiBackendReady = false;
+let lastAIBackendError = null;
 
 // Master control - pause/resume all AI features
 let masterEnabled = true;
@@ -157,15 +158,23 @@ function loadCachedConfig() {
     if (fs.existsSync(configPath)) {
       try {
         const configContent = fs.readFileSync(configPath, 'utf8');
+        const lines = configContent.split(/\r?\n/);
 
-        // Load all provider API keys from config file
-        for (const envVar of providerEnvVars) {
-          const regex = new RegExp(envVar + '\\s*=\\s*([^\\s#\\n]+)');
-          const match = configContent.match(regex);
-          if (match) {
-            const apiKey = match[1].trim().replace(/^["']|["']$/g, '');
-            if (apiKey && !apiKey.includes('your-')) {
-              cachedEnv[envVar] = apiKey;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Skip empty lines and comments (avoid loading keys from commented lines)
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          if (!trimmed.includes('=')) continue;
+
+          for (const envVar of providerEnvVars) {
+            const regex = new RegExp('^' + envVar + '\\s*=\\s*([^\\s#]+)');
+            const match = trimmed.match(regex);
+            if (match) {
+              const apiKey = match[1].trim().replace(/^["']|["']$/g, '');
+              if (apiKey && !apiKey.includes('your-')) {
+                cachedEnv[envVar] = apiKey;
+              }
+              break; // one env var per line
             }
           }
         }
@@ -173,6 +182,11 @@ function loadCachedConfig() {
         console.error('Failed to read config file:', configFile, err.message);
       }
     }
+  }
+
+  // LiteLLM expects REPLICATE_API_KEY; Replicate docs use REPLICATE_API_TOKEN
+  if (cachedEnv.REPLICATE_API_TOKEN && !cachedEnv.REPLICATE_API_KEY) {
+    cachedEnv.REPLICATE_API_KEY = cachedEnv.REPLICATE_API_TOKEN;
   }
 
   // Overlay encrypted keys from keystore (takes priority over .env)
@@ -676,6 +690,9 @@ function startAIBackend() {
     env: env
   });
 
+  aiBackendReady = false;
+  lastAIBackendError = null;
+
   // Read events from backend's stdout
   aiBackendRL = readline.createInterface({
     input: aiBackend.stdout,
@@ -692,7 +709,10 @@ function startAIBackend() {
   });
 
   aiBackend.stderr.on('data', (data) => {
-    console.log('AI backend debug:', data.toString());
+    const text = data.toString();
+    console.log('AI backend debug:', text);
+    // Keep the last error line around so we can surface a helpful hint to the UI if startup fails
+    lastAIBackendError = text.trim() || lastAIBackendError;
   });
 
   aiBackend.on('close', (code) => {
@@ -700,6 +720,24 @@ function startAIBackend() {
     aiBackend = null;
     aiBackendRL = null;
     aiBackendReady = false;
+
+    // Notify renderer windows that the backend is down
+    const status = {
+      ok: false,
+      code,
+      message: code === 0
+        ? 'AI engine stopped.'
+        : 'AI engine crashed. It will try to restart automatically.'
+    };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-backend-status', status);
+    }
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('ai-backend-status', status);
+    }
 
     // Auto-restart if master is enabled
     if (masterEnabled && code !== 0) {
@@ -714,6 +752,44 @@ function startAIBackend() {
 }
 
 function sendToAIBackend(command) {
+  if (!aiBackend || !aiBackend.stdin) {
+    console.error('AI backend process not running');
+    const status = {
+      ok: false,
+      message: 'AI engine is not running. It will try to restart automatically.'
+    };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-backend-status', status);
+    }
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('ai-backend-status', status);
+    }
+    return false;
+  }
+
+  if (!aiBackendReady) {
+    console.error('AI backend not ready');
+    const status = {
+      ok: false,
+      message: lastAIBackendError
+        ? `AI engine is not ready: ${lastAIBackendError}`
+        : 'AI engine is starting or misconfigured. Check provider keys in Settings.'
+    };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-backend-status', status);
+    }
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('ai-backend-status', status);
+    }
+    return false;
+  }
+
   if (aiBackend && aiBackend.stdin && aiBackendReady) {
     console.log('Sending to AI backend:', JSON.stringify(command).substring(0, 100));
     aiBackend.stdin.write(JSON.stringify(command) + '\n');
@@ -728,6 +804,44 @@ function handleAIBackendEvent(event) {
   if (event.event === 'started') {
     console.log('AI backend started, success:', event.success, 'PID:', event.pid);
     aiBackendReady = event.success;
+
+    if (!event.success) {
+      // Backend failed to initialize (e.g. Python deps or providers); surface a clear status to the UI
+      const status = {
+        ok: false,
+        message: lastAIBackendError
+          ? `AI engine failed to start: ${lastAIBackendError}`
+          : 'AI engine failed to start. Check Python installation and provider API keys.'
+      };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ai-backend-status', status);
+      }
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('ai-backend-status', status);
+      }
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.webContents.send('ai-backend-status', status);
+      }
+      return;
+    }
+
+    // Backend is up; let the UI know whether any providers are configured
+    const providersConfigured = typeof event.providers === 'number' ? event.providers : null;
+    const readyStatus = {
+      ok: true,
+      message: providersConfigured === 0
+        ? 'AI engine is running, but no providers are configured. Add an API key in Settings.'
+        : 'AI engine is ready.'
+    };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-backend-status', readyStatus);
+    }
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('ai-backend-status', readyStatus);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('ai-backend-status', readyStatus);
+    }
 
     // Once backend is ready, fetch agents and push to renderer for dropdown
     if (aiBackendReady) {
@@ -810,6 +924,7 @@ function handleAIBackendEvent(event) {
 
   } else if (event.event === 'error') {
     console.error('AI backend error:', event.message);
+    let routed = false;
     if (chatStreamActive && pendingChatRequest) {
       // Route error to chat window
       if (chatWindow && !chatWindow.isDestroyed()) {
@@ -817,9 +932,28 @@ function handleAIBackendEvent(event) {
       }
       chatStreamActive = false;
       pendingChatRequest = null;
+      routed = true;
     } else if (pendingAIRequest && pendingAIRequest.reject) {
       pendingAIRequest.reject(new Error(event.message));
       pendingAIRequest = null;
+      routed = true;
+    }
+
+    // If error wasn't tied to an active request, surface it as a backend status message
+    if (!routed) {
+      const status = {
+        ok: false,
+        message: event.message
+      };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ai-backend-status', status);
+      }
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('ai-backend-status', status);
+      }
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.webContents.send('ai-backend-status', status);
+      }
     }
 
   } else if (event.event === 'pong') {
@@ -861,7 +995,8 @@ function stopAIBackend() {
 }
 
 // Generate text using persistent backend with streaming
-async function generateTextStreaming(mode, buffer, extraParam = null, autoInject = false) {
+// extraContext can include overrides like { tone, agent, window, humanize }
+async function generateTextStreaming(mode, buffer, extraParam = null, autoInject = false, extraContext = null) {
   return new Promise((resolve, reject) => {
     if (!aiBackendReady) {
       reject(new Error('AI backend not ready'));
@@ -870,6 +1005,9 @@ async function generateTextStreaming(mode, buffer, extraParam = null, autoInject
 
     // Build context
     const context = { mode: mode, agent: currentAgent, window: lastWindowTitle };
+    if (extraContext && typeof extraContext === 'object') {
+      Object.assign(context, extraContext);
+    }
     if (mode === 'extension' && extraParam) {
       context.last_output = extraParam;
     } else if (mode === 'clipboard_with_instruction' && extraParam) {
@@ -1832,7 +1970,13 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
     const extraParam = mode === 'extension' ? context?.last_output :
       mode === 'clipboard_with_instruction' ? context?.instruction : null;
 
-    const result = await generateTextStreaming(mode, prompt, extraParam, true); // autoInject=true to skip streaming UI
+    const extraContext = {
+      tone: context?.tone,
+      humanize: context?.humanize,
+      agent: context?.agent || currentAgent
+    };
+
+    const result = await generateTextStreaming(mode, prompt, extraParam, true, extraContext); // autoInject=true to skip streaming UI
     return result;
   } catch (error) {
     return { error: error.message };
@@ -2006,11 +2150,39 @@ ipcMain.on('settings-master-toggle', (event, enabled) => {
 
   // Stop or start keystroke monitor based on master state
   if (!masterEnabled) {
-    // Clear any pending restart
+    // Clear any pending restart and stop background services
     if (monitorRestartTimer) {
       clearTimeout(monitorRestartTimer);
       monitorRestartTimer = null;
     }
+    monitorRestartCount = 0;
+    stopKeystrokeMonitor();
+    stopAIBackend();
+    aiBackendReady = false;
+  } else {
+    // Re-enable services when master is turned back on
+    monitorRestartCount = 0;
+    if (!keystrokeMonitor) {
+      startKeystrokeMonitor();
+    }
+    if (!aiBackend) {
+      startAIBackend();
+    }
+  }
+
+  // Let renderer windows reflect master state
+  const status = {
+    ok: masterEnabled && aiBackendReady,
+    message: masterEnabled ? 'AI assistant is enabled.' : 'AI assistant is paused.'
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('ai-backend-status', status);
+  }
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.webContents.send('ai-backend-status', status);
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send('ai-backend-status', status);
   }
 });
 

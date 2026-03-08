@@ -269,7 +269,8 @@ def generate_streaming(prompt, context, provider_manager):
                 else:
                     IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.")
                     IPC.send_chunk("", is_final=True)
-                    return "Error: Invalid API key and no fallback available."
+                    # Return empty string so the caller never mistakes this for valid model output
+                    return ""
 
             if '503' in error_str or 'overloaded' in error_str.lower():
                 retries += 1
@@ -278,7 +279,7 @@ def generate_streaming(prompt, context, provider_manager):
                     continue
                 IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
                 IPC.send_chunk("", is_final=True)
-                return f"Error: API overloaded. Tried {MAX_RETRIES} times."
+                return ""
 
             if _is_rate_limit_error(error_str):
                 # Rate limited / quota exceeded → try fallback to a different provider
@@ -292,15 +293,15 @@ def generate_streaming(prompt, context, provider_manager):
                     continue
                 IPC.send_error("API rate limit exceeded on all providers.")
                 IPC.send_chunk("", is_final=True)
-                return "Error: API rate limit exceeded."
+                return ""
 
             IPC.send_error(f"Generation error: {error_str}")
             IPC.send_chunk("", is_final=True)
-            return f"Error: {error_str}"
+            return ""
 
     IPC.send_error("Failed after multiple attempts.")
     IPC.send_chunk("", is_final=True)
-    return "Error: Failed after multiple attempts."
+    return ""
 
 
 def generate_non_streaming(prompt, context, provider_manager):
@@ -312,7 +313,9 @@ def generate_non_streaming(prompt, context, provider_manager):
     model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
 
     if not model:
-        return "Error: No LLM provider available."
+        # Surface via IPC so Electron can show a proper error state
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
+        return ""
 
     group = provider_manager.get_model_group(model)
     window_title = context.get("window", "") if context else ""
@@ -330,7 +333,8 @@ def generate_non_streaming(prompt, context, provider_manager):
                 text = clean_response(text)
                 provider_manager.store_interaction(window_title, prompt, text, group, mode)
                 return text
-            return "Error: No content in response."
+            IPC.send_error("No content in LLM response.")
+            return ""
 
         except Exception as e:
             error_str = str(e)
@@ -343,13 +347,16 @@ def generate_non_streaming(prompt, context, provider_manager):
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
                     continue
-                return "Error: Invalid API key and no fallback available."
+                IPC.send_error("Invalid API key and no fallback available.")
+                return ""
 
             if '503' in error_str or 'overloaded' in error_str.lower():
                 retries += 1
                 if retries < MAX_RETRIES:
                     time.sleep(RETRY_DELAY * retries)
                     continue
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
+                return ""
 
             if _is_rate_limit_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
@@ -358,10 +365,14 @@ def generate_non_streaming(prompt, context, provider_manager):
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
                     continue
+                IPC.send_error("API rate limit exceeded on all providers.")
+                return ""
 
-            return f"Error: {error_str}"
+            IPC.send_error(f"Generation error: {error_str}")
+            return ""
 
-    return "Error: Failed after multiple attempts."
+    IPC.send_error("Failed after multiple attempts.")
+    return ""
 
 
 def clean_response(text):

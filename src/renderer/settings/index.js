@@ -217,10 +217,10 @@ const PROVIDER_TEST_MODELS = {
     'ANTHROPIC_API_KEY': 'anthropic/claude-sonnet-4-20250514',
     'OPENAI_API_KEY': 'openai/gpt-4o-mini',
     'GEMINI_API_KEY': 'gemini/gemini-2.0-flash',
-    'XAI_API_KEY': 'xai/grok-2-latest',
+    'XAI_API_KEY': 'xai/grok-2',
     'TOGETHERAI_API_KEY': 'together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'PERPLEXITYAI_API_KEY': 'perplexity/sonar-pro',
-    'COHERE_API_KEY': 'cohere_chat/command-r-plus',
+    'COHERE_API_KEY': 'cohere_chat/command-a-03-2025',
     'REPLICATE_API_TOKEN': 'replicate/meta/meta-llama-3.1-405b-instruct',
 };
 

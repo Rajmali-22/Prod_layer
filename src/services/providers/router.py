@@ -26,10 +26,10 @@ PROVIDER_REGISTRY = [
     ("DEEPSEEK_API_KEY",      "deepseek/deepseek-chat",                              "powerful",  "DeepSeek Chat"),
     ("ANTHROPIC_API_KEY",     "anthropic/claude-sonnet-4-20250514",                   "powerful",  "Claude Sonnet"),
     ("OPENAI_API_KEY",        "openai/gpt-4o",                                       "powerful",  "GPT-4o"),
-    ("XAI_API_KEY",           "xai/grok-2-latest",                                   "powerful",  "Grok 2"),
+    ("XAI_API_KEY",           "xai/grok-2",                                         "powerful",  "Grok 2"),
     ("TOGETHERAI_API_KEY",    "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo", "powerful",  "Together Llama 3.3 70B"),
     ("PERPLEXITYAI_API_KEY",  "perplexity/sonar-pro",                                "powerful",  "Perplexity Sonar Pro"),
-    ("COHERE_API_KEY",        "cohere_chat/command-r-plus",                           "powerful",  "Cohere Command R+"),
+    ("COHERE_API_KEY",        "cohere_chat/command-a-03-2025",                        "powerful",  "Cohere Command A"),
     ("REPLICATE_API_TOKEN",   "replicate/meta/meta-llama-3.1-405b-instruct",         "powerful",  "Replicate Llama 405B"),
     ("DEEPSEEK_API_KEY",      "deepseek/deepseek-reasoner",                          "reasoning", "DeepSeek Reasoner"),
 ]

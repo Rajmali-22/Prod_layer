@@ -58,6 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
         startRecording();
     });
 
+    // Global AI backend status messages
+    ipcRenderer.on('ai-backend-status', (event, status) => {
+        if (!status || !status.message) return;
+        const type = status.ok ? 'success' : 'error';
+        showStatus(status.message, status.level || type);
+    });
+
     // Hold-to-talk events
     ipcRenderer.on('voice-recording-started', () => {
         isRecording = true;
