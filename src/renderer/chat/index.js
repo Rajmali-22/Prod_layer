@@ -1,6 +1,6 @@
 const { ipcRenderer } = require('electron');
 const path = require('path');
-const { marked, Renderer } = require(path.join(__dirname, 'lib', 'marked.min.js'));
+const { marked, Renderer } = require(path.join(__dirname, '..', 'lib', 'marked.min.js'));
 
 // ── State ──
 let currentConversationId = null;
@@ -52,7 +52,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   chatMicBtn = document.getElementById('chat-mic-btn');
 
   // Populate agent selector from backend
-  await populateChatAgentSelector();
+  try {
+    await populateChatAgentSelector();
+  } catch (e) {
+    console.error('Failed to populate agent selector:', e);
+  }
 
   // Restore saved chat agent from localStorage
   try {
@@ -73,7 +77,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Load conversations
-  await loadConversationList();
+  try {
+    await loadConversationList();
+  } catch (e) {
+    console.error('Failed to load conversations:', e);
+  }
 
   // Event listeners
   document.getElementById('close-btn').addEventListener('click', () => {
@@ -112,12 +120,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatMicBtn.addEventListener('click', startChatRecording);
   }
 
+  // Add global error handler for unhandled IPC calls
+  window.addEventListener('error', (e) => {
+    console.error('Unhandled error:', e.error);
+  });
+
   // IPC listeners for streaming
   ipcRenderer.on('chat-stream-start', onStreamStart);
   ipcRenderer.on('chat-stream-chunk', (e, chunk) => onStreamChunk(chunk));
   ipcRenderer.on('chat-stream-end', (e, data) => onStreamEnd(data));
   ipcRenderer.on('chat-stream-error', (e, error) => onStreamError(error));
   ipcRenderer.on('chat-title-updated', (e, data) => onTitleUpdated(data));
+  
+  // Show fallback messages to user
+  ipcRenderer.on('ai-backend-status', (e, status) => {
+    if (status.includes('switching to')) {
+      // Show a temporary notification about provider switch
+      const fallbackNotice = document.createElement('div');
+      fallbackNotice.style.position = 'fixed';
+      fallbackNotice.style.bottom = '20px';
+      fallbackNotice.style.right = '20px';
+      fallbackNotice.style.padding = '10px 16px';
+      fallbackNotice.style.background = 'rgba(100, 150, 255, 0.9)';
+      fallbackNotice.style.color = 'white';
+      fallbackNotice.style.borderRadius = '8px';
+      fallbackNotice.style.fontSize = '12px';
+      fallbackNotice.style.zIndex = '1000';
+      fallbackNotice.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+      fallbackNotice.textContent = status;
+      document.body.appendChild(fallbackNotice);
+      
+      setTimeout(() => {
+        fallbackNotice.remove();
+      }, 5000);
+    }
+  });
 
   // Re-populate agent dropdown when backend pushes updated list
   ipcRenderer.on('agents-updated', (event, agents) => {
@@ -199,12 +236,16 @@ function groupConversationsByDate(list) {
 // ── Load Conversation ──
 
 async function loadConversation(id) {
-  const conv = await ipcRenderer.invoke('chat-load-conversation', id);
-  if (!conv) return;
+  try {
+    const conv = await ipcRenderer.invoke('chat-load-conversation', id);
+    if (!conv) return;
 
-  currentConversationId = id;
-  renderMessages(conv.messages);
-  renderSidebar(conversations); // update active state
+    currentConversationId = id;
+    renderMessages(conv.messages);
+    renderSidebar(conversations); // update active state
+  } catch (e) {
+    console.error('Failed to load conversation:', e);
+  }
 }
 
 function renderMessages(messages) {
@@ -268,13 +309,17 @@ async function createNewConversation() {
 }
 
 async function deleteConversation(id) {
-  await ipcRenderer.invoke('chat-delete-conversation', id);
-  conversations = conversations.filter(c => c.id !== id);
-  if (currentConversationId === id) {
-    currentConversationId = null;
-    renderMessages([]);
+  try {
+    await ipcRenderer.invoke('chat-delete-conversation', id);
+    conversations = conversations.filter(c => c.id !== id);
+    if (currentConversationId === id) {
+      currentConversationId = null;
+      renderMessages([]);
+    }
+    renderSidebar(conversations);
+  } catch (e) {
+    console.error('Failed to delete conversation:', e);
   }
-  renderSidebar(conversations);
 }
 
 
@@ -403,7 +448,23 @@ function onStreamError(error) {
   updateSendButton(false);
 
   if (streamingBubble) {
-    streamingBubble.innerHTML = `<span style="color:rgba(255,100,100,0.8);">Error: ${escapeHtml(error)}</span>`;
+    let errorMessage = escapeHtml(error);
+    
+    // Provide more user-friendly messages for common errors
+    if (error.toLowerCase().includes('insufficient balance')) {
+      errorMessage = 'API account has insufficient balance. Please check your API provider settings and add funds, or switch to a different provider.';
+    } else if (error.toLowerCase().includes('api key') || error.toLowerCase().includes('authentication')) {
+      errorMessage = 'Invalid API key. Please check your API provider settings.';
+    } else if (error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('quota')) {
+      errorMessage = 'API rate limit exceeded. Please try again later or switch to a different provider.';
+    }
+    
+    streamingBubble.innerHTML = `<div style="color:rgba(255,100,100,0.8);padding:12px;background:rgba(255,100,100,0.05);border-radius:8px;border-left:3px solid rgba(255,100,100,0.3);">
+      <strong>Error:</strong> ${errorMessage}
+      <div style="margin-top:8px;font-size:12px;color:rgba(255,150,150,0.7);">
+        Tip: Check your API settings in the Settings menu or try a different AI provider.
+      </div>
+    </div>`;
   }
 
   streamingBubble = null;
@@ -448,13 +509,14 @@ async function handleSearch(query) {
     return;
   }
 
-  const results = await ipcRenderer.invoke('chat-search', query);
-  sidebarList.innerHTML = '';
+  try {
+    const results = await ipcRenderer.invoke('chat-search', query);
+    sidebarList.innerHTML = '';
 
-  if (results.length === 0) {
-    sidebarList.innerHTML = '<div style="padding:20px 10px;text-align:center;color:rgba(255,255,255,0.2);font-size:12px;">No results</div>';
-    return;
-  }
+    if (results.length === 0) {
+      sidebarList.innerHTML = '<div style="padding:20px 10px;text-align:center;color:rgba(255,255,255,0.2);font-size:12px;">No results</div>';
+      return;
+    }
 
   for (const r of results) {
     const div = document.createElement('div');
@@ -471,6 +533,10 @@ async function handleSearch(query) {
     });
     sidebarList.appendChild(div);
   }
+  } catch (e) {
+    console.error('Search failed:', e);
+    sidebarList.innerHTML = '<div style="padding:20px 10px;text-align:center;color:rgba(255,255,255,0.2);font-size:12px;">Search error</div>';
+  }
 }
 
 
@@ -478,7 +544,11 @@ async function handleSearch(query) {
 
 async function exportCurrentChat() {
   if (!currentConversationId) return;
-  await ipcRenderer.invoke('chat-export-markdown', currentConversationId);
+  try {
+    await ipcRenderer.invoke('chat-export-markdown', currentConversationId);
+  } catch (e) {
+    console.error('Export failed:', e);
+  }
 }
 
 

@@ -19,9 +19,8 @@ from providers.router import (
 from providers.context import resolve_model, build_messages_with_memory
 from providers.memory import MemoryManager
 
-# Suppress litellm debug noise
+# Suppress litellm debug noise (set_verbose is deprecated)
 litellm.suppress_debug_info = True
-litellm.set_verbose = False
 
 
 class ProviderManager:
@@ -84,16 +83,30 @@ class ProviderManager:
         group = self.get_model_group(failed_model)
         return pick_model_for_group_excluding(group, self._failed_models, self.available)
 
+    def _get_api_key_for_model(self, model):
+        """Get the API key for a model from PROVIDER_REGISTRY env vars."""
+        for env_var, reg_model, _group, _name in PROVIDER_REGISTRY:
+            if reg_model == model:
+                key = os.environ.get(env_var, "").strip()
+                return key if key and "your-" not in key else None
+        return None
+
     def stream(self, model, messages):
         """
         Stream a completion from LiteLLM.
         Yields chunk text strings.
         """
-        response = litellm.completion(
-            model=model,
-            messages=messages,
-            stream=True,
-        )
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "timeout": 60,
+            "max_tokens": 4096,
+        }
+        api_key = self._get_api_key_for_model(model)
+        if api_key:
+            kwargs["api_key"] = api_key
+        response = litellm.completion(**kwargs)
 
         for part in response:
             choices = part.get("choices", []) if isinstance(part, dict) else getattr(part, "choices", [])
@@ -108,11 +121,17 @@ class ProviderManager:
         """
         Non-streaming completion. Returns full text.
         """
-        response = litellm.completion(
-            model=model,
-            messages=messages,
-            stream=False,
-        )
+        kwargs = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "timeout": 60,
+            "max_tokens": 4096,
+        }
+        api_key = self._get_api_key_for_model(model)
+        if api_key:
+            kwargs["api_key"] = api_key
+        response = litellm.completion(**kwargs)
         choices = response.get("choices", []) if isinstance(response, dict) else getattr(response, "choices", [])
         if choices:
             msg = choices[0].get("message", {}) if isinstance(choices[0], dict) else getattr(choices[0], "message", None)
@@ -134,12 +153,17 @@ class ProviderManager:
         Returns {"success": True/False, "message": str}
         """
         try:
-            response = litellm.completion(
-                model=model_string,
-                messages=[{"role": "user", "content": "Say 'ok' in one word."}],
-                max_tokens=5,
-                stream=False,
-            )
+            kwargs = {
+                "model": model_string,
+                "messages": [{"role": "user", "content": "Say 'ok' in one word."}],
+                "max_tokens": 5,
+                "stream": False,
+                "timeout": 30,
+            }
+            api_key = self._get_api_key_for_model(model_string)
+            if api_key:
+                kwargs["api_key"] = api_key
+            response = litellm.completion(**kwargs)
             choices = response.get("choices", []) if isinstance(response, dict) else getattr(response, "choices", [])
             if choices:
                 return {"success": True, "message": "Provider working"}

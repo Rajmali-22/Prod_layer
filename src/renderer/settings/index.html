@@ -12,11 +12,11 @@
         }
 
         :root {
-            --bg-primary: rgba(28, 28, 30, 0.75);
+            --bg-primary: rgba(28, 28, 30, 1);
             --bg-secondary: rgba(255, 255, 255, 0.16);
             --bg-hover: rgba(255, 255, 255, 0.22);
             --border-color: rgba(255, 255, 255, 0.20);
-            --bg-surface: rgba(44, 44, 46, 0.92);
+            --bg-surface: rgba(44, 44, 46, 1);
             --text-primary: rgba(255, 255, 255, 0.95);
             --text-secondary: rgba(255, 255, 255, 0.55);
             --toggle-bg: rgba(120, 120, 128, 0.32);
@@ -28,11 +28,11 @@
         }
 
         body.light-mode {
-            --bg-primary: rgba(255, 255, 255, 0.78);
+            --bg-primary: rgba(255, 255, 255, 1);
             --bg-secondary: rgba(0, 0, 0, 0.14);
             --bg-hover: rgba(0, 0, 0, 0.20);
             --border-color: rgba(0, 0, 0, 0.20);
-            --bg-surface: rgba(255, 255, 255, 0.96);
+            --bg-surface: rgba(255, 255, 255, 1);
             --text-primary: rgba(0, 0, 0, 0.88);
             --text-secondary: rgba(0, 0, 0, 0.5);
             --toggle-bg: rgba(120, 120, 128, 0.2);
@@ -206,6 +206,53 @@
         .setting-item:hover {
             background: var(--bg-hover);
             border-color: rgba(0, 122, 255, 0.2);
+        }
+
+        .opacity-control {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 140px;
+        }
+
+        .opacity-slider {
+            flex: 1;
+            min-width: 80px;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--toggle-bg);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .opacity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid var(--bg-surface);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .opacity-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            border: 2px solid var(--bg-surface);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .opacity-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            min-width: 36px;
+            text-align: right;
         }
 
         .settings-content .section .section-body {
@@ -635,6 +682,16 @@
                                 <div class="toggle-track"></div>
                                 <div class="toggle-thumb"></div>
                             </label>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Transparency</span>
+                                <span class="setting-desc">0% = solid, 100% = fully transparent (applies to overlay and all windows)</span>
+                            </div>
+                            <div class="opacity-control">
+                                <input type="range" id="window-opacity-slider" min="0" max="100" value="0" class="opacity-slider">
+                                <span id="window-opacity-value" class="opacity-value">0%</span>
+                            </div>
                         </div>
                     </div>
                 </div>

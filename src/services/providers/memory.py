@@ -27,7 +27,10 @@ except ImportError:
 MAX_HISTORY_PER_SESSION = 99999   # keep last N exchanges on disk (effectively unlimited)
 MAX_HISTORY_SENT_TO_LLM = 50     # cap messages sent to LLM (last N exchanges) to avoid context-window overflow
 SESSION_MAX_AGE_DAYS = 36500     # ~100 years (effectively never prune by age)
-SESSIONS_DIR = os.path.join("data", "memory", "sessions")
+
+# Use absolute path relative to project root (memory.py is in src/services/providers/)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+SESSIONS_DIR = os.path.join(_PROJECT_ROOT, "data", "memory", "sessions")
 GLOBAL_SESSION_KEY = "_global"  # shared memory pool across all windows/models
 
 # Modes that are too short-lived for conversation memory

@@ -4,6 +4,7 @@ Log Manager - Keystroke logging to file.
 
 import os
 import json
+from pathlib import Path
 import time
 import threading
 from datetime import datetime
@@ -49,6 +50,9 @@ class LogManager:
             existing.append(entry)
             if len(existing) > Config.MAX_LOG_ENTRIES:
                 existing = existing[-Config.MAX_LOG_ENTRIES:]
+
+            # Ensure data directory exists before writing
+            Path(Config.LOG_FILE).parent.mkdir(parents=True, exist_ok=True)
 
             # Write (compact JSON)
             with open(Config.LOG_FILE, 'w', encoding='utf-8') as f:
