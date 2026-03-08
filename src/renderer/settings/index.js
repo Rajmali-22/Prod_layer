@@ -9,7 +9,8 @@ let settings = {
     codingModeEnabled: false,
     ultraHumanEnabled: false,
     darkMode: true,
-    ghostModeEnabled: true  // default ON = hidden from screen share
+    ghostModeEnabled: true,  // default ON = hidden from screen share
+    windowOpacity: 1         // 0-1, 1 = solid
 };
 
 // DOM Elements
@@ -21,6 +22,8 @@ let liveModeToggle;
 let codingModeToggle;
 let ultraHumanToggle;
 let ghostModeToggle;
+let windowOpacitySlider;
+let windowOpacityValue;
 let closeBtn;
 
 // Initialize
@@ -33,6 +36,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     codingModeToggle = document.getElementById('coding-mode-toggle');
     ultraHumanToggle = document.getElementById('ultra-human-toggle');
     ghostModeToggle = document.getElementById('ghost-mode-toggle');
+    windowOpacitySlider = document.getElementById('window-opacity-slider');
+    windowOpacityValue = document.getElementById('window-opacity-value');
     closeBtn = document.getElementById('close-btn');
 
     await loadSettings();
@@ -100,6 +105,17 @@ function setupEventListeners() {
         ipcRenderer.send('settings-ghost-mode-toggle', settings.ghostModeEnabled);
     });
 
+    // Transparency slider: 0% = solid (opacity 1), 100% = fully transparent (opacity 0)
+    if (windowOpacitySlider) {
+        windowOpacitySlider.addEventListener('input', () => {
+            const transparencyPct = Math.max(0, Math.min(100, Number(windowOpacitySlider.value)));
+            settings.windowOpacity = 1 - transparencyPct / 100;
+            if (windowOpacityValue) windowOpacityValue.textContent = Math.round(transparencyPct) + '%';
+            saveSettings();
+            ipcRenderer.send('settings-window-opacity', settings.windowOpacity);
+        });
+    }
+
     // Close button
     closeBtn.addEventListener('click', () => {
         ipcRenderer.send('close-settings-window');
@@ -135,6 +151,7 @@ async function loadSettings() {
             settings.codingModeEnabled = mainState.codingModeEnabled;
             settings.ultraHumanEnabled = mainState.ultraHumanEnabled;
             if (mainState.ghostModeEnabled !== undefined) settings.ghostModeEnabled = mainState.ghostModeEnabled;
+            if (mainState.windowOpacity !== undefined) settings.windowOpacity = mainState.windowOpacity;
         }
     } catch (e) {
         console.error('Failed to sync settings with main process:', e);
@@ -158,6 +175,14 @@ function updateUI() {
     codingModeToggle.checked = settings.codingModeEnabled;
     ultraHumanToggle.checked = settings.ultraHumanEnabled;
     ghostModeToggle.checked = settings.ghostModeEnabled;
+    const opacity = Math.max(0, Math.min(1, settings.windowOpacity ?? 1));
+    const transparencyPct = Math.round((1 - opacity) * 100);  // 0% = solid, 100% = fully transparent
+    if (windowOpacitySlider) {
+        windowOpacitySlider.value = transparencyPct;
+    }
+    if (windowOpacityValue) {
+        windowOpacityValue.textContent = transparencyPct + '%';
+    }
     applyTheme();
     updateDisabledState();
 }
@@ -424,6 +449,9 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     if (newSettings.darkMode !== undefined) {
         settings.darkMode = newSettings.darkMode;
+    }
+    if (newSettings.windowOpacity !== undefined) {
+        settings.windowOpacity = newSettings.windowOpacity;
     }
     updateUI();
 });

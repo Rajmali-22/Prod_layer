@@ -38,6 +38,15 @@ function applyGhostModeToAllWindows() {
   if (chatWindow && !chatWindow.isDestroyed()) applyWindowCaptureAffinity(chatWindow);
 }
 
+function applyOpacityToAllWindows() {
+  const alpha = Math.max(0, Math.min(1, windowOpacity));
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(alpha);
+  if (outputWindow && !outputWindow.isDestroyed()) outputWindow.setOpacity(alpha);
+  if (explanationWindow && !explanationWindow.isDestroyed()) explanationWindow.setOpacity(alpha);
+  if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.setOpacity(alpha);
+  if (chatWindow && !chatWindow.isDestroyed()) chatWindow.setOpacity(alpha);
+}
+
 // Try to load robotjs, but handle errors gracefully
 let robot = null;
 try {
@@ -88,6 +97,9 @@ let masterEnabled = true;
 
 // Ghost mode: when true, app is hidden from screen capture (Meet/Zoom). When false, app is visible so you can show it in meetings.
 let ghostModeEnabled = true;
+
+// Window opacity: 0-1 for all app windows (overlay, output, explanation, settings, chat).
+let windowOpacity = 1;
 
 // Cached config (loaded once at startup)
 let cachedEnv = null;
@@ -268,6 +280,7 @@ function createWindow() {
   mainWindow.setIgnoreMouseEvents(false);
 
   applyWindowCaptureAffinity(mainWindow);
+  mainWindow.setOpacity(windowOpacity);
 }
 
 function createOutputWindow() {
@@ -295,6 +308,7 @@ function createOutputWindow() {
   outputWindow.hide();
 
   applyWindowCaptureAffinity(outputWindow);
+  outputWindow.setOpacity(windowOpacity);
 
   outputWindow.on('closed', () => {
     outputWindow = null;
@@ -326,6 +340,7 @@ function createExplanationWindow() {
   explanationWindow.hide();
 
   applyWindowCaptureAffinity(explanationWindow);
+  explanationWindow.setOpacity(windowOpacity);
 
   explanationWindow.on('closed', () => {
     explanationWindow = null;
@@ -376,6 +391,7 @@ function createSettingsWindow() {
   settingsWindow.loadFile(path.join('src', 'renderer', 'settings', 'index.html'));
 
   applyWindowCaptureAffinity(settingsWindow);
+  settingsWindow.setOpacity(windowOpacity);
 
   settingsWindow.on('closed', () => {
     settingsWindow = null;
@@ -528,6 +544,7 @@ function createChatWindow() {
 
   chatWindow.loadFile(path.join('src', 'renderer', 'chat', 'index.html'));
   applyWindowCaptureAffinity(chatWindow);
+  chatWindow.setOpacity(windowOpacity);
 
   chatWindow.on('closed', () => {
     chatWindow = null;
@@ -2135,6 +2152,10 @@ ipcMain.on('settings-init-sync', (event, s) => {
       ghostModeEnabled = s.ghostModeEnabled;
       applyGhostModeToAllWindows();
     }
+    if (s.windowOpacity !== undefined) {
+      windowOpacity = Math.max(0, Math.min(1, s.windowOpacity));
+      applyOpacityToAllWindows();
+    }
   }
 });
 
@@ -2195,7 +2216,8 @@ ipcMain.handle('get-settings-state', async () => {
     liveModeEnabled,
     codingModeEnabled,
     ultraHumanEnabled,
-    ghostModeEnabled
+    ghostModeEnabled,
+    windowOpacity
   };
 });
 
@@ -2212,6 +2234,12 @@ ipcMain.on('settings-ghost-mode-toggle', (event, enabled) => {
   ghostModeEnabled = enabled;
   console.log('Ghost mode (hide from screen share):', ghostModeEnabled);
   applyGhostModeToAllWindows();
+});
+
+// IPC handler for window opacity (0-1); applies to all app windows
+ipcMain.on('settings-window-opacity', (event, value) => {
+  windowOpacity = Math.max(0, Math.min(1, value));
+  applyOpacityToAllWindows();
 });
 
 // IPC handler for coding mode toggle
