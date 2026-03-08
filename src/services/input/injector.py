@@ -54,7 +54,7 @@ def cleanup_pause_hotkey():
     if HAS_KEYBOARD:
         try:
             kb.remove_hotkey('ctrl+.')
-        except:
+        except Exception:
             pass
 
 # Mapping for special characters that need shift
@@ -245,7 +245,7 @@ def send_backspaces(count, humanize=False):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python keyboard_inject.py <text> [--backspace N] [--humanize]", file=sys.stderr)
+        print("Usage: python injector.py <text> [--backspace N] [--humanize]", file=sys.stderr)
         sys.exit(1)
 
     # Parse arguments
@@ -260,7 +260,8 @@ def main():
             try:
                 backspace_count = int(sys.argv[i + 1])
             except ValueError:
-                print("Invalid backspace count", file=sys.stderr)
+                print("Invalid backspace count. Use a positive integer.", file=sys.stderr)
+                sys.exit(1)
             i += 2
         elif sys.argv[i] == '--humanize':
             humanize = True

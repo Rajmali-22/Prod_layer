@@ -131,9 +131,9 @@ Be direct and concise. Give actionable output, not descriptions."""
         else:
             return None, "PIL library required for Gemini vision. Run: pip install Pillow"
 
-        # Call Gemini Vision API
+        # Call Gemini Vision API (gemini-2.0-flash supports vision)
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             contents=[image, prompt],
         )
 
@@ -197,25 +197,17 @@ def main():
         except json.JSONDecodeError:
             instruction = sys.argv[1]
 
-    print(f"DEBUG: Instruction: {instruction}", file=sys.stderr)
-
     # Capture screenshot
-    print("DEBUG: Capturing screenshot...", file=sys.stderr)
     image_bytes, error = capture_screenshot()
     if error:
         print(json.dumps({"error": error}))
         sys.exit(1)
 
-    print(f"DEBUG: Screenshot captured, size: {len(image_bytes)} bytes", file=sys.stderr)
-
     # Call vision API
-    print("DEBUG: Calling Gemini Vision API...", file=sys.stderr)
     result, error = call_vision_api(image_bytes, instruction)
     if error:
         print(json.dumps({"error": error}))
         sys.exit(1)
-
-    print(f"DEBUG: Got response, length: {len(result)}", file=sys.stderr)
 
     # Return result
     print(json.dumps({"text": result}))

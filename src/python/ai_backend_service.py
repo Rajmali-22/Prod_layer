@@ -201,7 +201,8 @@ def _is_rate_limit_error(error_str):
     """Check if an error is a rate limit / quota exceeded failure."""
     rate_signals = ['429', 'rate limit', 'ratelimit', 'rate_limit',
                     'exceeded your current quota', 'quota exceeded',
-                    'too many requests', 'resource exhausted']
+                    'too many requests', 'resource exhausted',
+                    'insufficient balance']
     error_lower = error_str.lower()
     return any(sig in error_lower for sig in rate_signals)
 
@@ -276,7 +277,7 @@ def generate_streaming(prompt, context, provider_manager):
                 return f"Error: API overloaded. Tried {MAX_RETRIES} times."
 
             if _is_rate_limit_error(error_str):
-                # Rate limited / quota exceeded → try fallback to a different provider
+                # Rate limited / quota exceeded / insufficient balance → try fallback to a different provider
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
                     IPC.send_error(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
@@ -285,6 +286,13 @@ def generate_streaming(prompt, context, provider_manager):
                     full_text = ""
                     provider_switches += 1
                     continue
+                
+                # Check for specific insufficient balance error
+                if "insufficient balance" in error_str.lower():
+                    IPC.send_error("API account has insufficient balance. Please add funds or use a different provider.")
+                    IPC.send_chunk("", is_final=True)
+                    return "Error: Insufficient account balance. Please check your API provider account."
+                
                 IPC.send_error("API rate limit exceeded on all providers.")
                 IPC.send_chunk("", is_final=True)
                 return "Error: API rate limit exceeded."

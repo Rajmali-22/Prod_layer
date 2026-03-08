@@ -43,8 +43,8 @@ class IPC:
         """Send JSON message to Electron."""
         try:
             print(json.dumps(data), flush=True)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[IPC] Send failed: {e}", file=sys.stderr)
 
     @staticmethod
     def send_error(message):
@@ -453,6 +453,7 @@ def generate_streaming_with_messages(messages, context, provider_manager):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
                     model = fallback
+                    group = provider_manager.get_model_group(model)
                     full_text = ""
                     provider_switches += 1
                     continue
@@ -474,6 +475,7 @@ def generate_streaming_with_messages(messages, context, provider_manager):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
                     model = fallback
+                    group = provider_manager.get_model_group(model)
                     full_text = ""
                     provider_switches += 1
                     continue

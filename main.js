@@ -1914,7 +1914,7 @@ function stopVoiceRecording() {
 }
 
 function transcribeSavedRecording() {
-  const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
+  const pythonScript = path.join(__dirname, 'src', 'services', 'media', 'voice.py');
   const transcribeProcess = spawn(getPythonCommand(), [pythonScript, '--transcribe'], {
     cwd: __dirname
   });

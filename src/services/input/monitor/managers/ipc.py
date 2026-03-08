@@ -3,6 +3,7 @@ IPC Manager - Communication with Electron process.
 """
 
 import json
+import sys
 
 
 class IPCManager:
@@ -13,8 +14,8 @@ class IPCManager:
         """Send event to Electron via stdout."""
         try:
             print(json.dumps(event_data), flush=True)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[IPC] Send failed: {e}", file=sys.stderr)
 
     @staticmethod
     def send_error(message):

@@ -21,7 +21,7 @@ def cleanup():
     try:
         if os.path.exists(TEMP_AUDIO_FILE):
             os.remove(TEMP_AUDIO_FILE)
-    except:
+    except Exception:
         pass
 
 atexit.register(cleanup)
@@ -122,7 +122,7 @@ def transcribe_recording():
     # Clean up
     try:
         os.remove(TEMP_AUDIO_FILE)
-    except:
+    except Exception:
         pass
 
     return result

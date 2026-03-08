@@ -19,9 +19,8 @@ from providers.router import (
 from providers.context import resolve_model, build_messages_with_memory
 from providers.memory import MemoryManager
 
-# Suppress litellm debug noise
+# Suppress litellm debug noise (set_verbose is deprecated)
 litellm.suppress_debug_info = True
-litellm.set_verbose = False
 
 
 class ProviderManager:
