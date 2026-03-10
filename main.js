@@ -1466,7 +1466,7 @@ async function processVisionAnalysis(instruction) {
     pythonProcess.on('close', async (code) => {
       let resultText = '';
 
-      if (code === 0 && output.trim()) {
+      if (output.trim()) {
         try {
           const result = JSON.parse(output.trim());
           if (result.text) {
@@ -1475,6 +1475,8 @@ async function processVisionAnalysis(instruction) {
           } else if (result.error) {
             console.error('Screenshot vision error:', result.error);
             resultText = 'Error: ' + result.error;
+          } else {
+            resultText = 'Vision analysis returned no content.';
           }
         } catch (e) {
           console.error('Failed to parse screenshot vision output:', output);
@@ -1482,7 +1484,9 @@ async function processVisionAnalysis(instruction) {
         }
       } else {
         console.error('Screenshot vision failed:', errorOutput);
-        resultText = 'Vision analysis failed. Check console for details.';
+        resultText = errorOutput.trim()
+          ? 'Vision analysis failed: ' + errorOutput.trim()
+          : 'Vision analysis failed. Check console for details.';
       }
 
       // Show window with result

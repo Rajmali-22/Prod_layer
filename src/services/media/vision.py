@@ -27,6 +27,7 @@ except ImportError:
 # Google Gemini API
 try:
     from google import genai
+    from google.genai import types
     HAS_GEMINI = True
 except ImportError:
     HAS_GEMINI = False
@@ -74,13 +75,15 @@ def capture_screenshot():
 
     try:
         with mss.mss() as sct:
-            # Capture the entire screen (all monitors combined or primary)
-            monitor = sct.monitors[0]  # 0 = all monitors, 1 = primary
+            # Capture the primary monitor to avoid oversized multi-monitor payloads.
+            monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
             screenshot = sct.grab(monitor)
 
             # Convert to PNG bytes
             if HAS_PIL:
                 img = Image.frombytes('RGB', screenshot.size, screenshot.bgra, 'raw', 'BGRX')
+                # Keep screenshots within a sane size for multimodal APIs.
+                img.thumbnail((1600, 1600))
                 buffer = io.BytesIO()
                 img.save(buffer, format='PNG', optimize=True)
                 img_bytes = buffer.getvalue()
@@ -124,23 +127,22 @@ Be direct and concise. Give actionable output, not descriptions."""
 
         # Create Gemini client with API key
         client = genai.Client(api_key=api_key)
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+        last_error = None
 
-        # Convert image bytes to PIL Image for Gemini
-        if HAS_PIL:
-            image = Image.open(io.BytesIO(image_bytes))
-        else:
-            return None, "PIL library required for Gemini vision. Run: pip install Pillow"
+        for model_name in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest"):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[prompt, image_part],
+                )
+                result = getattr(response, "text", None)
+                if result and result.strip():
+                    return result, None
+            except Exception as model_error:
+                last_error = model_error
 
-        # Call Gemini Vision API (gemini-2.0-flash supports vision)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[image, prompt],
-        )
-
-        # Extract text from response
-        result = response.text
-
-        return result, None
+        return None, f"Vision API error: {last_error or 'empty response from Gemini'}"
 
     except Exception as e:
         return None, f"Vision API error: {str(e)}"
