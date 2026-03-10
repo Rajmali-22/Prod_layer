@@ -292,7 +292,7 @@ def _find_available_model():
         ("OPENAI_API_KEY",    "openai/gpt-4o"),
         ("ANTHROPIC_API_KEY", "anthropic/claude-sonnet-4-20250514"),
         ("MISTRAL_API_KEY",   "mistral/mistral-small-latest"),
-        ("GEMINI_API_KEY",    "gemini/gemini-2.0-flash"),
+        ("GEMINI_API_KEY",    "gemini/gemini-2.5-flash"),
         ("OPENAI_API_KEY",    "openai/gpt-4o-mini"),
     ]
     seen = set()

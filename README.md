@@ -108,7 +108,7 @@ For coding interviews - types code like a real developer:
 Prod_Layer supports 12+ AI providers through LiteLLM:
 
 - **Fast Models**: Groq Llama 3.3 70B, Mistral Small, GPT-4o Mini, Gemini 2.0 Flash
-- **Powerful Models**: DeepSeek Chat, Claude Sonnet, GPT-4o, Grok 2, Together Llama 3.3 70B
+- **Powerful Models**: DeepSeek Chat, Claude Sonnet, GPT-4o, Grok 4, Together Llama 3.3 70B
 - **Reasoning Models**: DeepSeek Reasoner, Perplexity Sonar Pro, Cohere Command R+, Replicate Llama 405B
 
 #### Smart Routing
@@ -231,7 +231,7 @@ Create `.env` file with your API keys. Prod_Layer supports 12+ providers. Keys c
 | **DeepSeek Chat** | `DEEPSEEK_API_KEY` | https://platform.deepseek.com/api_keys |
 | **Claude Sonnet** | `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
 | **GPT-4o** | `OPENAI_API_KEY` | https://platform.openai.com/api-keys |
-| **Grok 2** | `XAI_API_KEY` | https://console.x.ai/ |
+| **Grok 4** | `XAI_API_KEY` | https://console.x.ai/ |
 | **Together Llama 3.3 70B** | `TOGETHERAI_API_KEY` | https://api.together.xyz/settings/api-keys |
 | **Perplexity Sonar Pro** | `PERPLEXITYAI_API_KEY` | https://www.perplexity.ai/settings/api |
 | **Cohere Command R+** | `COHERE_API_KEY` | https://dashboard.cohere.com/api-keys |
