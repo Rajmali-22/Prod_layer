@@ -149,3 +149,23 @@ class TestBuildMessagesWithMemory:
         assert len(result) == 3
         assert result[0]["content"] == "prev"
         assert result[2]["content"] == "hello"
+
+    def test_duplicate_memory_already_in_chat_is_filtered(self):
+        messages = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "my name is Raj"},
+            {"role": "assistant", "content": "Nice to meet you, Raj."},
+            {"role": "user", "content": "what do you know about me?"},
+        ]
+        memory = [
+            {"role": "user", "content": "my name is Raj"},
+            {"role": "assistant", "content": "Nice to meet you, Raj."},
+            {"role": "user", "content": "I work on Prod Layer"},
+            {"role": "assistant", "content": "I'll remember that."},
+        ]
+        result = build_messages_with_memory(messages, memory)
+        assert result[0]["role"] == "system"
+        assert result[1]["content"] == "I work on Prod Layer"
+        assert result[2]["content"] == "I'll remember that."
+        assert result[-1]["content"] == "what do you know about me?"
+        assert sum(1 for m in result if m["content"] == "my name is Raj") == 1

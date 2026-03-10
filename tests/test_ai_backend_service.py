@@ -136,3 +136,32 @@ class TestHandleRequest:
         with patch.object(svc.IPC, "send_error") as mock_err:
             svc.handle_request({"cmd": "test_provider"}, pm)
             mock_err.assert_called_once()
+
+
+class TestChatMemory:
+    def test_generate_streaming_with_messages_attaches_memory(self):
+        pm = MagicMock()
+        pm.resolve_model.return_value = "deepseek/deepseek-chat"
+        pm.get_model_group.return_value = "powerful"
+        pm.get_memory_history.return_value = [
+            {"role": "user", "content": "my name is Raj"},
+            {"role": "assistant", "content": "I know your name is Raj."},
+        ]
+        pm.stream.return_value = iter(["I remember your name is Raj."])
+
+        messages = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "what do you know about me?"},
+        ]
+
+        with patch.object(svc.IPC, "send_chunk"):
+            result = svc.generate_streaming_with_messages(
+                messages,
+                {"mode": "chat", "window": "chat", "agent": "auto"},
+                pm,
+            )
+
+        assert result == "I remember your name is Raj."
+        streamed_messages = pm.stream.call_args[0][1]
+        assert any(m["content"] == "my name is Raj" for m in streamed_messages)
+        pm.store_interaction.assert_called_once()

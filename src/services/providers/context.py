@@ -88,11 +88,22 @@ def build_messages_with_memory(messages, memory_messages=None):
     # Find system message (if any) and user messages
     system_msgs = [m for m in messages if m.get("role") == "system"]
     non_system = [m for m in messages if m.get("role") != "system"]
+    existing_pairs = {
+        (m.get("role", ""), m.get("content", ""))
+        for m in non_system
+    }
+    filtered_memory = [
+        m for m in memory_messages
+        if (m.get("role", ""), m.get("content", "")) not in existing_pairs
+    ]
+
+    if not filtered_memory:
+        return messages
 
     # Build: system + memory history + current user messages
     result = []
     result.extend(system_msgs)
-    result.extend(memory_messages)
+    result.extend(filtered_memory)
     result.extend(non_system)
 
     return result

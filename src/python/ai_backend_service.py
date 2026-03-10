@@ -412,12 +412,10 @@ def generate_streaming_with_messages(messages, context, provider_manager):
         IPC.send_chunk("", is_final=True)
         return ""
 
-    # Attach cross-model memory (global pool from prompt bar / other windows)
     group = provider_manager.get_model_group(model)
     window_title = context.get("window", "") if context else ""
     memory_msgs = provider_manager.get_memory_history(window_title, group, mode)
-    if memory_msgs:
-        messages = build_messages_with_memory(messages, memory_msgs)
+    messages = build_messages_with_memory(messages, memory_msgs)
 
     full_text = ""
     retries = 0
