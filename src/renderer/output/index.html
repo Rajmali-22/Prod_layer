@@ -185,6 +185,18 @@
 
         let isVisionMode = false;
 
+        function filterPreamble(text) {
+            if (!text || typeof text !== 'string') return text;
+            let s = text;
+            const re = /^\s*(\*{2,}|#{1,6})?\s*\n/m;
+            let prev;
+            do {
+                prev = s;
+                s = s.replace(re, '');
+            } while (s !== prev);
+            return s.trimStart();
+        }
+
         // Show vision input mode
         ipcRenderer.on('vision-mode', (event) => {
             isVisionMode = true;
@@ -202,7 +214,7 @@
             visionInputContainer.classList.remove('active');
             visionStatus.classList.remove('loading');
             visionInput.disabled = false;
-            suggestionText.textContent = text;
+            suggestionText.textContent = filterPreamble(text || '');
             suggestionText.classList.remove('streaming');
             hintText.innerHTML = '<kbd>Ctrl+Shift+P</kbd> paste';
         });
@@ -223,8 +235,13 @@
             suggestionText.scrollTop = suggestionText.scrollHeight;
         });
 
-        // Streaming support - end streaming
-        ipcRenderer.on('stream-end', (event) => {
+        // Streaming support - end streaming (optional filtered full text from main)
+        ipcRenderer.on('stream-end', (event, filteredText) => {
+            if (filteredText != null && filteredText !== '') {
+                suggestionText.textContent = filteredText;
+            } else {
+                suggestionText.textContent = filterPreamble(suggestionText.textContent || '');
+            }
             suggestionText.classList.remove('streaming');
             hintText.innerHTML = '<kbd>Ctrl+Shift+P</kbd> paste';
         });

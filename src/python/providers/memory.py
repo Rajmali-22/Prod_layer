@@ -25,8 +25,8 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 
 MAX_HISTORY_PER_SESSION = 99999   # keep last N exchanges on disk (effectively unlimited)
-MAX_HISTORY_SENT_TO_LLM = 50     # cap messages sent to LLM (last N exchanges) to avoid context-window overflow
-SESSION_MAX_AGE_DAYS = 36500     # ~100 years (effectively never prune by age)
+MAX_HISTORY_SENT_TO_LLM = 10     # cap messages sent to LLM to the last 10 exchanges
+SESSION_MAX_AGE_DAYS = int(os.environ.get("MEMORY_SESSION_MAX_AGE_DAYS", "7"))
 SESSIONS_DIR = os.path.join("data", "memory", "sessions")
 GLOBAL_SESSION_KEY = "_global"  # shared memory pool across all windows/models
 
@@ -90,6 +90,16 @@ class MemoryManager:
         except IOError:
             pass
 
+    def _next_timestamp(self, key):
+        """Return a timestamp guaranteed to be newer than the last stored message."""
+        now = time.time()
+        last_ts = 0
+        if self.sessions.get(key):
+            last_ts = self.sessions[key][-1].get("ts", 0)
+        if self.sessions.get(GLOBAL_SESSION_KEY):
+            last_ts = max(last_ts, self.sessions[GLOBAL_SESSION_KEY][-1].get("ts", 0))
+        return max(now, last_ts + 0.01)
+
     def _prune_old_sessions(self):
         """Remove sessions older than SESSION_MAX_AGE_DAYS."""
         cutoff = time.time() - (SESSION_MAX_AGE_DAYS * 86400)
@@ -120,9 +130,9 @@ class MemoryManager:
             return
 
         key = _normalize_window_title(window_title)
-        now = time.time()
-        user_entry = {"role": "user", "content": user_prompt, "ts": now}
-        assistant_entry = {"role": "assistant", "content": assistant_response, "ts": now + 0.001}
+        now = self._next_timestamp(key)
+        user_entry = {"role": "user", "content": user_prompt, "ts": now, "session": key}
+        assistant_entry = {"role": "assistant", "content": assistant_response, "ts": now + 0.001, "session": key}
         max_msgs = MAX_HISTORY_PER_SESSION * 2
 
         # Store in window-specific session
@@ -146,27 +156,14 @@ class MemoryManager:
 
     def get_history(self, window_title, group="powerful", mode="prompt"):
         """
-        Get conversation history for a window merged with the global shared pool.
-        Deduplicates by timestamp so cross-model interactions are visible everywhere.
+        Get conversation history for a specific window/session.
         Returns empty list for short-lived modes.
         """
         if mode in SKIP_MEMORY_MODES:
             return []
 
         key = _normalize_window_title(window_title)
-        window_msgs = self.sessions.get(key, [])
-        global_msgs = self.sessions.get(GLOBAL_SESSION_KEY, []) if key != GLOBAL_SESSION_KEY else []
-
-        # Merge and deduplicate by (timestamp, role) so paired user+assistant are both kept
-        seen = set()
-        merged = []
-        for m in window_msgs + global_msgs:
-            key_tuple = (m.get("ts", 0), m.get("role", ""))
-            if key_tuple not in seen:
-                seen.add(key_tuple)
-                merged.append(m)
-
-        # Sort by timestamp and trim to context cap (so we don't exceed LLM context window)
+        merged = list(self.sessions.get(key, []))
         merged.sort(key=lambda m: m.get("ts", 0))
         max_sent = MAX_HISTORY_SENT_TO_LLM * 2
         if len(merged) > max_sent:
@@ -179,6 +176,12 @@ class MemoryManager:
         """Clear a specific window's session."""
         key = _normalize_window_title(window_title)
         self.sessions.pop(key, None)
+        if GLOBAL_SESSION_KEY in self.sessions:
+            self.sessions[GLOBAL_SESSION_KEY] = [
+                m for m in self.sessions[GLOBAL_SESSION_KEY]
+                if m.get("session") != key
+            ]
+            self._save_session(GLOBAL_SESSION_KEY)
         try:
             os.remove(self._session_path(key))
         except FileNotFoundError:

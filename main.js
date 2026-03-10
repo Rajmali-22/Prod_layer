@@ -11,6 +11,20 @@ function getPythonCommand() {
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
+// Strip leading preamble (e.g. ***, ##, blank lines) from AI response before display/save
+function filterPreamble(text) {
+  if (!text || typeof text !== 'string') return text;
+  let s = text;
+  // Remove leading lines that are blank or only *** / ## (with optional whitespace)
+  const re = /^\s*(\*{2,}|#{1,6})?\s*\n/m;
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(re, '');
+  } while (s !== prev);
+  return s.trimStart();
+}
+
 // Windows: set whether window is excluded from screen capture (Ghost ON) or visible in capture (Ghost OFF)
 function applyWindowCaptureAffinity(win) {
   if (os.platform() !== 'win32' || !win || win.isDestroyed()) return;
@@ -74,6 +88,11 @@ let isWindowVisible = false;
 // Chat streaming state (separate from prompt bar)
 let pendingChatRequest = null;  // { conversationId, resolve, reject, text }
 let chatStreamActive = false;
+let chatConversationMemoryEnabled = true;
+
+// Context management configuration
+const CHAT_CONTEXT_WINDOW_SIZE = 50; // Maximum messages to send for context
+const MAX_TOKEN_ESTIMATE = 4000;     // Conservative token limit estimate
 
 // Keystroke monitor state
 let keystrokeMonitor = null;
@@ -591,7 +610,7 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
   // 120s timeout for chat (longer than prompt bar's 60s)
   setTimeout(() => {
     if (chatStreamActive && pendingChatRequest && pendingChatRequest.conversationId === conversationId) {
-      const partialText = pendingChatRequest.text;
+      const partialText = filterPreamble(pendingChatRequest.text);
       chatStreamActive = false;
       pendingChatRequest = null;
       if (chatWindow && !chatWindow.isDestroyed()) {
@@ -888,7 +907,7 @@ function handleAIBackendEvent(event) {
         chatWindow.webContents.send('chat-stream-chunk', event.text);
       }
       if (event.final) {
-        const fullText = pendingChatRequest.text;
+        const fullText = filterPreamble(pendingChatRequest.text);
         const convId = pendingChatRequest.conversationId;
         chatStreamActive = false;
         pendingChatRequest = null;
@@ -915,9 +934,9 @@ function handleAIBackendEvent(event) {
 
       // If final chunk, complete the request
       if (event.final) {
-        const finalText = pendingAIRequest.text;
+        const finalText = filterPreamble(pendingAIRequest.text);
         if (outputWindow && !pendingAIRequest.autoInject) {
-          outputWindow.webContents.send('stream-end');
+          outputWindow.webContents.send('stream-end', finalText);
         }
         // Store explanation if present (coding mode)
         if (event.explanation) {
@@ -971,6 +990,21 @@ function handleAIBackendEvent(event) {
       if (settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.webContents.send('ai-backend-status', status);
       }
+    }
+
+  } else if (event.event === 'status') {
+    // Non-fatal backend status (e.g., provider fallback switching)
+    console.log('AI backend status:', event.message);
+    // Optionally surface as a lightweight status message to windows
+    const status = { ok: true, message: event.message };
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-backend-status', status);
+    }
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('ai-backend-status', status);
     }
 
   } else if (event.event === 'pong') {
@@ -1297,7 +1331,7 @@ async function showSuggestionAtCursor(text) {
     outputWindow.showInactive();
 
     await new Promise(resolve => setTimeout(resolve, 50));
-    outputWindow.webContents.send('display-text', text);
+    outputWindow.webContents.send('display-text', filterPreamble(text));
   }
 }
 
@@ -1474,7 +1508,7 @@ async function processVisionAnalysis(instruction) {
 
         outputWindow.setPosition(Math.round(x), Math.round(y));
         outputWindow.show();
-        outputWindow.webContents.send('display-text', resultText);
+        outputWindow.webContents.send('display-text', filterPreamble(resultText));
       }
     });
 
@@ -1513,10 +1547,24 @@ async function handleClipboardTrigger() {
     let result;
     if (typedInstruction) {
       // Combined mode: clipboard as context, typed text as instruction
-      result = await generateTextStreaming('clipboard_with_instruction', clipboardText, typedInstruction, autoInjectEnabled);
+      // Force Mistral for clipboard + instruction
+      result = await generateTextStreaming(
+        'clipboard_with_instruction',
+        clipboardText,
+        typedInstruction,
+        autoInjectEnabled,
+        { agent: 'mistral/mistral-small-latest' }
+      );
     } else {
       // Original mode: clipboard only
-      result = await generateTextStreaming('clipboard', clipboardText, null, autoInjectEnabled);
+      // Force Mistral for clipboard-only mode
+      result = await generateTextStreaming(
+        'clipboard',
+        clipboardText,
+        null,
+        autoInjectEnabled,
+        { agent: 'mistral/mistral-small-latest' }
+      );
     }
 
     if (result && result.text) {
@@ -2034,7 +2082,7 @@ ipcMain.handle('show-inline-suggestion', async (event, text) => {
     outputWindow.showInactive();  // Show without stealing focus
 
     await new Promise(resolve => setTimeout(resolve, 50));
-    outputWindow.webContents.send('display-text', text);
+    outputWindow.webContents.send('display-text', filterPreamble(text));
   }
 });
 
@@ -2064,7 +2112,7 @@ ipcMain.handle('show-output', async (event, text) => {
     outputWindow.showInactive();
 
     await new Promise(resolve => setTimeout(resolve, 50));
-    outputWindow.webContents.send('display-text', text);
+    outputWindow.webContents.send('display-text', filterPreamble(text));
   }
 });
 
@@ -2694,7 +2742,11 @@ ipcMain.on('chat-agent-change', (event, agent) => {
   console.log('Chat agent changed to:', chatAgent);
 });
 
-ipcMain.on('chat-send-message', (event, conversationId, userMessage) => {
+ipcMain.on('chat-memory-setting-changed', (event, enabled) => {
+  chatConversationMemoryEnabled = enabled !== false;
+});
+
+ipcMain.on('chat-send-message', async (event, conversationId, userMessage) => {
   // Save user message to disk
   const userMsg = {
     id: generateId('msg'),
@@ -2722,14 +2774,70 @@ ipcMain.on('chat-send-message', (event, conversationId, userMessage) => {
     content: 'You are a helpful AI assistant. Use markdown formatting in your responses: headings, bold, italic, code blocks with language tags, lists, and tables where appropriate. Be thorough and well-organized.'
   };
   const apiMessages = [systemMsg];
-  for (const msg of conv.messages) {
-    apiMessages.push({ role: msg.role, content: msg.content });
+  
+  // Smart context management with windowing and token estimation
+  if (chatConversationMemoryEnabled) {
+    // Smart context windowing with token estimation
+    let contextMessages = [];
+    let estimatedTokens = 0;
+    
+    // Function to estimate token count (rough approximation)
+    const estimateTokens = (text) => {
+      // Very rough estimate: 1 token ≈ 4 characters (English)
+      // This is conservative and will undercount for some languages
+      return Math.ceil(text.length / 4);
+    };
+    
+    // Start from most recent messages and work backwards
+    for (let i = conv.messages.length - 1; i >= 0; i--) {
+      const msg = conv.messages[i];
+      const msgTokens = estimateTokens(msg.content);
+      
+      // Check if adding this message would exceed our token budget
+      // Reserve space for system message and new user message
+      if (estimatedTokens + msgTokens > MAX_TOKEN_ESTIMATE - 1000) {
+        break;
+      }
+      
+      estimatedTokens += msgTokens;
+      contextMessages.unshift(msg); // Add to beginning to maintain order
+    }
+    
+    // Add the context messages (most recent first)
+    for (const msg of contextMessages) {
+      apiMessages.push({ role: msg.role, content: msg.content });
+    }
+    
+    // Add context summary if we had to truncate
+    if (contextMessages.length < conv.messages.length) {
+      apiMessages.unshift({
+        role: 'system',
+        content: `CONTEXT NOTICE: This conversation has ${conv.messages.length} messages total. ` +
+                 `Showing the most recent ${contextMessages.length} messages (${Math.round(estimatedTokens/1000)}k tokens) for context. ` +
+                 `Older messages are available in the conversation history.`
+      });
+    }
+  } else {
+    // Context-less mode: only current message
+    // Personal memory will be added by the provider system separately
+    apiMessages.push({ role: 'user', content: userMessage });
   }
 
   generateChatStreaming(conversationId, userMessage, apiMessages);
 });
 
 ipcMain.on('chat-stop-generation', () => {
+  if (chatStreamActive && pendingChatRequest && pendingChatRequest.text.trim()) {
+    const assistantMsg = {
+      id: generateId('msg'),
+      role: 'assistant',
+      content: filterPreamble(pendingChatRequest.text),
+      timestamp: Date.now(),
+      model: chatAgent,
+      interrupted: true
+    };
+    saveChatMessage(pendingChatRequest.conversationId, assistantMsg);
+  }
   chatStreamActive = false;
   pendingChatRequest = null;
 });

@@ -10,10 +10,12 @@ let streamingText = '';
 let streamingBubble = null;
 let renderTimer = null;
 let searchTimer = null;
+let useConversationMemory = true;
 
 // ── DOM refs ──
 let sidebarList, messagesContainer, chatInput, sendBtn, searchInput;
 let chatAgentSelect, emptyState, exportBtn, chatMicBtn;
+let memoryToggleBtn, memoryStatusIndicator;
 
 // Voice recording state
 let isChatRecording = false;
@@ -39,6 +41,19 @@ marked.setOptions({
   gfm: true
 });
 
+// Strip leading preamble (***, ##, blank lines) from AI response before display
+function filterPreamble(text) {
+  if (!text || typeof text !== 'string') return text;
+  let s = text;
+  const re = /^\s*(\*{2,}|#{1,6})?\s*\n/m;
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(re, '');
+  } while (s !== prev);
+  return s.trimStart();
+}
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded', async () => {
   sidebarList = document.getElementById('sidebar-list');
@@ -50,6 +65,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   emptyState = document.getElementById('empty-state');
   exportBtn = document.getElementById('export-btn');
   chatMicBtn = document.getElementById('chat-mic-btn');
+  memoryToggleBtn = document.getElementById('memory-toggle-btn');
+  memoryStatusIndicator = document.getElementById('memory-status');
 
   // Populate agent selector from backend
   try {
@@ -65,6 +82,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       chatAgentSelect.value = savedAgent;
     }
   } catch (e) {}
+
+  // Restore conversation memory setting
+  try {
+    const savedMemorySetting = localStorage.getItem('chat-memory-enabled');
+    if (savedMemorySetting !== null) {
+      useConversationMemory = savedMemorySetting === 'true';
+    }
+  } catch (e) {
+    console.error('Failed to load memory setting:', e);
+  }
+  ipcRenderer.send('chat-memory-setting-changed', useConversationMemory);
 
   // Agent selector change handler
   if (chatAgentSelect) {
@@ -89,8 +117,54 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('new-chat-btn').addEventListener('click', createNewConversation);
-  sendBtn.addEventListener('click', sendMessage);
+  sendBtn.addEventListener('click', handlePrimaryAction);
   exportBtn.addEventListener('click', exportCurrentChat);
+
+  // Memory toggle button
+  if (memoryToggleBtn) {
+    memoryToggleBtn.addEventListener('click', () => {
+      useConversationMemory = !useConversationMemory;
+      syncConversationMemoryUI();
+      ipcRenderer.send('chat-memory-setting-changed', useConversationMemory);
+
+      try {
+        localStorage.setItem('chat-memory-enabled', useConversationMemory.toString());
+      } catch (e) {
+        console.error('Failed to save memory setting:', e);
+      }
+
+      // Show feedback to user
+      const feedback = document.createElement('div');
+      feedback.textContent = useConversationMemory ? 
+        '🧠 Memory ON - Full conversation context' : 
+        '📝 Memory OFF - Personal context only';
+      feedback.style.position = 'fixed';
+      feedback.style.bottom = '20px';
+      feedback.style.left = '50%';
+      feedback.style.transform = 'translateX(-50%)';
+      feedback.style.padding = '10px 18px';
+      feedback.style.background = useConversationMemory ? 'rgba(100, 150, 255, 0.9)' : 'rgba(150, 100, 255, 0.9)';
+      feedback.style.color = 'white';
+      feedback.style.borderRadius = '8px';
+      feedback.style.fontSize = '13px';
+      feedback.style.fontWeight = '500';
+      feedback.style.zIndex = '1000';
+      feedback.style.boxShadow = '0 2px 12px rgba(0,0,0,0.15)';
+      feedback.style.transition = 'all 0.2s';
+      document.body.appendChild(feedback);
+      
+      // Animate feedback
+      setTimeout(() => {
+        feedback.style.opacity = '0';
+        feedback.style.transform = 'translateX(-50%) translateY(10px)';
+      }, 1500);
+      
+      setTimeout(() => {
+        feedback.remove();
+      }, 2000);
+    });
+  }
+  syncConversationMemoryUI();
 
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -134,7 +208,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Show fallback messages to user
   ipcRenderer.on('ai-backend-status', (e, status) => {
-    if (status.includes('switching to')) {
+    const msg = typeof status === 'string' ? status : (status && status.message ? status.message : '');
+    if (msg && msg.includes('switching to')) {
       // Show a temporary notification about provider switch
       const fallbackNotice = document.createElement('div');
       fallbackNotice.style.position = 'fixed';
@@ -147,7 +222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       fallbackNotice.style.fontSize = '12px';
       fallbackNotice.style.zIndex = '1000';
       fallbackNotice.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-      fallbackNotice.textContent = status;
+      fallbackNotice.textContent = msg;
       document.body.appendChild(fallbackNotice);
       
       setTimeout(() => {
@@ -163,6 +238,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+function syncConversationMemoryUI() {
+  if (memoryToggleBtn) {
+    memoryToggleBtn.classList.toggle('active', useConversationMemory);
+  }
+
+  if (memoryStatusIndicator) {
+    memoryStatusIndicator.classList.toggle('memory-on', useConversationMemory);
+    memoryStatusIndicator.classList.toggle('memory-off', !useConversationMemory);
+    memoryStatusIndicator.textContent = useConversationMemory ? 'Memory on' : 'Memory off';
+    memoryStatusIndicator.title = useConversationMemory ?
+      'Conversation memory ON - full chat context included' :
+      'Conversation memory OFF - only the latest message is sent';
+  }
+}
 
 
 // ── Conversation List ──
@@ -377,6 +467,15 @@ function doSend(text) {
   }
 }
 
+function handlePrimaryAction() {
+  if (isStreaming) {
+    stopStreaming();
+    return;
+  }
+
+  sendMessage();
+}
+
 
 // ── Streaming Handlers ──
 
@@ -404,11 +503,12 @@ function onStreamChunk(chunk) {
   if (!streamingBubble) return;
   streamingText += chunk;
 
-  // Debounced re-render (100ms)
+  // Debounced re-render (100ms); filter preamble so *** / ## etc. are not shown
   clearTimeout(renderTimer);
   renderTimer = setTimeout(() => {
     if (streamingBubble) {
-      streamingBubble.innerHTML = renderMarkdown(streamingText) + '<span class="streaming-cursor"></span>';
+      const displayText = filterPreamble(streamingText);
+      streamingBubble.innerHTML = renderMarkdown(displayText) + '<span class="streaming-cursor"></span>';
       scrollToBottom();
     }
   }, 100);
@@ -419,19 +519,19 @@ function onStreamEnd(data) {
   clearTimeout(renderTimer);
   updateSendButton(false);
 
-  if (streamingBubble) {
-    const finalText = data.text || streamingText;
-    streamingBubble.innerHTML = renderMarkdown(finalText);
+  const streamMsg = document.getElementById('streaming-message');
+  const finalText = filterPreamble(data.text || streamingText);
 
-    // Add time
-    const streamMsg = document.getElementById('streaming-message');
-    if (streamMsg) {
-      streamMsg.removeAttribute('id');
-      const time = document.createElement('div');
-      time.className = 'message-time';
-      time.textContent = formatTime(Date.now());
-      streamMsg.appendChild(time);
-    }
+  if (streamingBubble) {
+    streamingBubble.innerHTML = renderMarkdown(finalText);
+  }
+
+  if (streamMsg) {
+    streamMsg.removeAttribute('id');
+    const time = document.createElement('div');
+    time.className = 'message-time';
+    time.textContent = formatTime(Date.now());
+    streamMsg.appendChild(time);
   }
 
   streamingBubble = null;
@@ -447,24 +547,42 @@ function onStreamError(error) {
   clearTimeout(renderTimer);
   updateSendButton(false);
 
+  const raw = (error ?? '').toString();
+  let errorMessage = escapeHtml(raw);
+
+  // Provide more user-friendly messages for common errors
+  const lower = raw.toLowerCase();
+  if (lower.includes('insufficient balance') || lower.includes('credit balance') || lower.includes('add credits')) {
+    errorMessage = 'API account has insufficient credits. Add credits or switch to a different provider/model.';
+  } else if (lower.includes('api key') || lower.includes('authentication') || lower.includes('unauthorized') || lower.includes('forbidden')) {
+    errorMessage = 'Invalid or unauthorized API key. Check your provider key in Settings.';
+  } else if (lower.includes('rate limit') || lower.includes('quota') || lower.includes('too many requests')) {
+    errorMessage = 'API rate limit exceeded. Try again later or switch to a different provider/model.';
+  } else if (lower.includes('backend not ready')) {
+    errorMessage = 'AI backend is still starting. Wait 2–5 seconds and try again.';
+  } else if (lower.includes('failed to send to ai backend')) {
+    errorMessage = 'AI backend was not reachable. Restart the app and try again.';
+  }
+
+  const errorHtml = `<div style="color:rgba(255,100,100,0.8);padding:12px;background:rgba(255,100,100,0.05);border-radius:8px;border-left:3px solid rgba(255,100,100,0.3);">
+    <strong>Error:</strong> ${errorMessage}
+    <div style="margin-top:8px;font-size:12px;color:rgba(255,150,150,0.7);">
+      Tip: Check your API settings in the Settings menu or try a different AI provider.
+    </div>
+  </div>`;
+
   if (streamingBubble) {
-    let errorMessage = escapeHtml(error);
-    
-    // Provide more user-friendly messages for common errors
-    if (error.toLowerCase().includes('insufficient balance')) {
-      errorMessage = 'API account has insufficient balance. Please check your API provider settings and add funds, or switch to a different provider.';
-    } else if (error.toLowerCase().includes('api key') || error.toLowerCase().includes('authentication')) {
-      errorMessage = 'Invalid API key. Please check your API provider settings.';
-    } else if (error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('quota')) {
-      errorMessage = 'API rate limit exceeded. Please try again later or switch to a different provider.';
-    }
-    
-    streamingBubble.innerHTML = `<div style="color:rgba(255,100,100,0.8);padding:12px;background:rgba(255,100,100,0.05);border-radius:8px;border-left:3px solid rgba(255,100,100,0.3);">
-      <strong>Error:</strong> ${errorMessage}
-      <div style="margin-top:8px;font-size:12px;color:rgba(255,150,150,0.7);">
-        Tip: Check your API settings in the Settings menu or try a different AI provider.
-      </div>
-    </div>`;
+    streamingBubble.innerHTML = errorHtml;
+  } else {
+    // If we errored before stream-start, create an assistant bubble so the user sees something.
+    const div = document.createElement('div');
+    div.className = 'message assistant';
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.innerHTML = errorHtml;
+    div.appendChild(bubble);
+    messagesContainer.appendChild(div);
+    scrollToBottom();
   }
 
   streamingBubble = null;
@@ -482,22 +600,38 @@ function onTitleUpdated(data) {
 function updateSendButton(streaming) {
   if (streaming) {
     sendBtn.classList.add('stop-btn');
+    sendBtn.title = 'Stop generating';
     sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
-    sendBtn.onclick = () => {
-      ipcRenderer.send('chat-stop-generation');
-      isStreaming = false;
-      updateSendButton(false);
-      if (streamingBubble) {
-        streamingBubble.innerHTML = renderMarkdown(streamingText);
-      }
-      streamingBubble = null;
-      streamingText = '';
-    };
   } else {
     sendBtn.classList.remove('stop-btn');
+    sendBtn.title = 'Send message';
     sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    sendBtn.onclick = sendMessage;
   }
+}
+
+function stopStreaming() {
+  ipcRenderer.send('chat-stop-generation');
+  isStreaming = false;
+  clearTimeout(renderTimer);
+  updateSendButton(false);
+
+  const partialText = filterPreamble(streamingText);
+  const streamMsg = document.getElementById('streaming-message');
+
+  if (streamingBubble) {
+    streamingBubble.innerHTML = partialText ? renderMarkdown(partialText) : '<em>Response stopped.</em>';
+  }
+
+  if (streamMsg) {
+    streamMsg.removeAttribute('id');
+    const time = document.createElement('div');
+    time.className = 'message-time';
+    time.textContent = formatTime(Date.now());
+    streamMsg.appendChild(time);
+  }
+
+  streamingBubble = null;
+  streamingText = '';
 }
 
 

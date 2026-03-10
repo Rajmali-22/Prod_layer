@@ -52,6 +52,11 @@ class IPC:
         IPC.send({"event": "error", "message": message})
 
     @staticmethod
+    def send_status(message):
+        """Send non-fatal status event (informational)."""
+        IPC.send({"event": "status", "message": message})
+
+    @staticmethod
     def send_chunk(text, is_final=False):
         """Send streaming chunk."""
         IPC.send({
@@ -197,7 +202,8 @@ def _is_auth_error(error_str):
     """Check if an error is an authentication/authorization failure."""
     auth_signals = ['401', 'unauthorized', 'authentication', 'invalid x-api-key',
                     'invalid api key', 'invalid api_key', 'incorrect api key',
-                    'invalid argument', 'forbidden', '403']
+                    'invalid argument', 'forbidden', '403',
+                    'does not have permission']
     error_lower = error_str.lower()
     return any(sig in error_lower for sig in auth_signals)
 
@@ -206,7 +212,11 @@ def _is_rate_limit_error(error_str):
     """Check if an error is a rate limit / quota exceeded failure."""
     rate_signals = ['429', 'rate limit', 'ratelimit', 'rate_limit',
                     'exceeded your current quota', 'quota exceeded',
-                    'too many requests', 'resource exhausted']
+                    'too many requests', 'resource exhausted',
+                    'insufficient balance', 'insufficient_quota', 'insufficient quota',
+                    'credit balance is too low', 'balance is too low',
+                    'credit balance', 'plans & billing',
+                    'credit limit', 'add credits', 'billing']
     error_lower = error_str.lower()
     return any(sig in error_lower for sig in rate_signals)
 
@@ -260,7 +270,7 @@ def generate_streaming(prompt, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_error(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""  # reset partial output
@@ -285,7 +295,7 @@ def generate_streaming(prompt, context, provider_manager):
                 # Rate limited / quota exceeded → try fallback to a different provider
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_error(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
@@ -343,6 +353,7 @@ def generate_non_streaming(prompt, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
@@ -361,6 +372,7 @@ def generate_non_streaming(prompt, context, provider_manager):
             if _is_rate_limit_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
@@ -420,12 +432,10 @@ def generate_streaming_with_messages(messages, context, provider_manager):
         IPC.send_chunk("", is_final=True)
         return ""
 
-    # Attach cross-model memory (global pool from prompt bar / other windows)
     group = provider_manager.get_model_group(model)
     window_title = context.get("window", "") if context else ""
     memory_msgs = provider_manager.get_memory_history(window_title, group, mode)
-    if memory_msgs:
-        messages = build_messages_with_memory(messages, memory_msgs)
+    messages = build_messages_with_memory(messages, memory_msgs)
 
     full_text = ""
     retries = 0
@@ -452,6 +462,7 @@ def generate_streaming_with_messages(messages, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
@@ -474,6 +485,7 @@ def generate_streaming_with_messages(messages, context, provider_manager):
             if _is_rate_limit_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
