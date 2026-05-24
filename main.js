@@ -1551,23 +1551,19 @@ async function handleClipboardTrigger() {
     let result;
     if (typedInstruction) {
       // Combined mode: clipboard as context, typed text as instruction
-      // Force Mistral for clipboard + instruction
       result = await generateTextStreaming(
         'clipboard_with_instruction',
         clipboardText,
         typedInstruction,
-        autoInjectEnabled,
-        { agent: 'mistral/mistral-small-latest' }
+        autoInjectEnabled
       );
     } else {
       // Original mode: clipboard only
-      // Force Mistral for clipboard-only mode
       result = await generateTextStreaming(
         'clipboard',
         clipboardText,
         null,
-        autoInjectEnabled,
-        { agent: 'mistral/mistral-small-latest' }
+        autoInjectEnabled
       );
     }
 
