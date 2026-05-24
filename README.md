@@ -46,6 +46,8 @@ npm start
 | `Ctrl+Shift+V` | Voice input (hold to talk) |
 | `Ctrl+Shift+S` | Open settings |
 | `Ctrl+Shift+C` | Open chat window |
+| `Ctrl+Shift+I` | Toggle Interview Q&A mode window |
+| `Ctrl+Alt+I` | Force capture question and answer now |
 | `Ctrl+Shift+Space` | Toggle overlay window |
 | `Escape` | Cancel / close popup |
 
@@ -62,6 +64,9 @@ Access with `Ctrl+Shift+S`:
 | **Live Mode** | Auto-suggest on typing pause |
 | **Coding Mode** | Show code + explanation windows |
 | **Ultra Human Typing** | Chain-of-thought code injection |
+| **Interview Q&A Mode** | Live interview answer panel (streaming) |
+| **Interview Audio Source** | Auto / Microphone / Loopback |
+| **Interview Answer Model** | Fast model used for interview answers |
 | **LLM Provider** | Select default AI model |
 | **API Key Management** | Configure and test provider keys |
 
@@ -100,6 +105,7 @@ For coding interviews - types code like a real developer:
 - **Vision Mode** - Analyze screenshots (`Ctrl+Shift+F`)
 - **Voice Mode** - Speech to text (`Ctrl+Shift+V` hold to talk)
 - **Chat Mode** - Persistent conversations with full history (`Ctrl+Shift+C`)
+- **Interview Q&A Mode** - Detect question and stream concise answer in a dedicated 400x800 panel (`Ctrl+Shift+I`, `Ctrl+Alt+I`)
 
 ### Advanced Features
 

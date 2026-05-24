@@ -8,6 +8,9 @@ let settings = {
     liveModeEnabled: false,
     codingModeEnabled: false,
     ultraHumanEnabled: false,
+    interviewModeEnabled: false,
+    interviewAudioSource: 'auto',
+    interviewAgent: 'mistral/mistral-small-latest',
     darkMode: true,
     ghostModeEnabled: true,  // default ON = hidden from screen share
     windowOpacity: 1         // 0-1, 1 = solid
@@ -21,6 +24,9 @@ let autoInjectToggle;
 let liveModeToggle;
 let codingModeToggle;
 let ultraHumanToggle;
+let interviewModeToggle;
+let interviewAudioSourceSelect;
+let interviewModelInput;
 let ghostModeToggle;
 let windowOpacitySlider;
 let windowOpacityValue;
@@ -35,6 +41,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     liveModeToggle = document.getElementById('live-mode-toggle');
     codingModeToggle = document.getElementById('coding-mode-toggle');
     ultraHumanToggle = document.getElementById('ultra-human-toggle');
+    interviewModeToggle = document.getElementById('interview-mode-toggle');
+    interviewAudioSourceSelect = document.getElementById('interview-audio-source');
+    interviewModelInput = document.getElementById('interview-model-input');
     ghostModeToggle = document.getElementById('ghost-mode-toggle');
     windowOpacitySlider = document.getElementById('window-opacity-slider');
     windowOpacityValue = document.getElementById('window-opacity-value');
@@ -98,6 +107,33 @@ function setupEventListeners() {
         ipcRenderer.send('settings-ultra-human-toggle', settings.ultraHumanEnabled);
     });
 
+    // Interview mode toggle
+    if (interviewModeToggle) {
+        interviewModeToggle.addEventListener('change', () => {
+            settings.interviewModeEnabled = interviewModeToggle.checked;
+            saveSettings();
+            ipcRenderer.send('settings-interview-mode-toggle', settings.interviewModeEnabled);
+        });
+    }
+
+    // Interview audio source
+    if (interviewAudioSourceSelect) {
+        interviewAudioSourceSelect.addEventListener('change', () => {
+            settings.interviewAudioSource = interviewAudioSourceSelect.value || 'auto';
+            saveSettings();
+            ipcRenderer.send('settings-interview-audio-source', settings.interviewAudioSource);
+        });
+    }
+
+    // Interview answer model
+    if (interviewModelInput) {
+        interviewModelInput.addEventListener('change', () => {
+            settings.interviewAgent = (interviewModelInput.value || '').trim() || 'mistral/mistral-small-latest';
+            saveSettings();
+            ipcRenderer.send('settings-interview-model-change', settings.interviewAgent);
+        });
+    }
+
     // Ghost mode toggle
     ghostModeToggle.addEventListener('change', () => {
         settings.ghostModeEnabled = ghostModeToggle.checked;
@@ -150,6 +186,9 @@ async function loadSettings() {
             settings.liveModeEnabled = mainState.liveModeEnabled;
             settings.codingModeEnabled = mainState.codingModeEnabled;
             settings.ultraHumanEnabled = mainState.ultraHumanEnabled;
+            if (mainState.interviewModeEnabled !== undefined) settings.interviewModeEnabled = mainState.interviewModeEnabled;
+            if (mainState.interviewAudioSource !== undefined) settings.interviewAudioSource = mainState.interviewAudioSource;
+            if (mainState.interviewAgent !== undefined) settings.interviewAgent = mainState.interviewAgent;
             if (mainState.ghostModeEnabled !== undefined) settings.ghostModeEnabled = mainState.ghostModeEnabled;
             if (mainState.windowOpacity !== undefined) settings.windowOpacity = mainState.windowOpacity;
         }
@@ -174,6 +213,9 @@ function updateUI() {
     liveModeToggle.checked = settings.liveModeEnabled;
     codingModeToggle.checked = settings.codingModeEnabled;
     ultraHumanToggle.checked = settings.ultraHumanEnabled;
+    if (interviewModeToggle) interviewModeToggle.checked = settings.interviewModeEnabled;
+    if (interviewAudioSourceSelect) interviewAudioSourceSelect.value = settings.interviewAudioSource || 'auto';
+    if (interviewModelInput) interviewModelInput.value = settings.interviewAgent || 'mistral/mistral-small-latest';
     ghostModeToggle.checked = settings.ghostModeEnabled;
     const opacity = Math.max(0, Math.min(1, settings.windowOpacity ?? 1));
     const transparencyPct = Math.round((1 - opacity) * 100);  // 0% = solid, 100% = fully transparent
@@ -195,6 +237,9 @@ function updateDisabledState() {
     liveModeToggle.disabled = !isEnabled;
     codingModeToggle.disabled = !isEnabled;
     ultraHumanToggle.disabled = !isEnabled;
+    if (interviewModeToggle) interviewModeToggle.disabled = !isEnabled;
+    if (interviewAudioSourceSelect) interviewAudioSourceSelect.disabled = !isEnabled;
+    if (interviewModelInput) interviewModelInput.disabled = !isEnabled;
 
     // Visual feedback
     const behaviorItems = document.querySelectorAll('.setting-item');
@@ -443,6 +488,15 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     if (newSettings.ultraHumanEnabled !== undefined) {
         settings.ultraHumanEnabled = newSettings.ultraHumanEnabled;
+    }
+    if (newSettings.interviewModeEnabled !== undefined) {
+        settings.interviewModeEnabled = newSettings.interviewModeEnabled;
+    }
+    if (newSettings.interviewAudioSource !== undefined) {
+        settings.interviewAudioSource = newSettings.interviewAudioSource;
+    }
+    if (newSettings.interviewAgent !== undefined) {
+        settings.interviewAgent = newSettings.interviewAgent;
     }
     if (newSettings.ghostModeEnabled !== undefined) {
         settings.ghostModeEnabled = newSettings.ghostModeEnabled;

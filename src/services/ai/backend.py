@@ -22,6 +22,7 @@ if _SERVICES_DIR not in sys.path:
 
 from providers import ProviderManager
 from providers.context import build_messages_with_memory
+from prompts import build_prompt
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -163,6 +164,13 @@ RULES:
 - Focus on WHY not HOW"""
             },
             {"role": "user", "content": f"Problem: {prompt}\n\nCode:\n{code}\n\nExplain briefly for interview."}
+        ]
+
+    elif mode == "interview_qa":
+        system_prompt, user_prompt = build_prompt(prompt, mode="interview_qa")
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ]
 
     else:

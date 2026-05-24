@@ -20,6 +20,8 @@ keyboard==0.13.5
 # Audio/Voice
 PyAudio==0.2.14
 SpeechRecognition==3.14.5
+webrtcvad==2.0.10
+pyaudiowpatch==0.2.12.7; sys_platform == 'win32'
 
 # System/Utils
 pywin32==307; sys_platform == 'win32'

@@ -811,6 +811,35 @@
                                     <div class="toggle-thumb"></div>
                                 </label>
                             </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Interview Q&A Mode</span>
+                                    <span class="setting-desc">Auto-listen and stream interview answers</span>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" id="interview-mode-toggle">
+                                    <div class="toggle-track"></div>
+                                    <div class="toggle-thumb"></div>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Interview Audio Source</span>
+                                    <span class="setting-desc">Mic, loopback, or auto-select</span>
+                                </div>
+                                <select id="interview-audio-source" class="provider-select">
+                                    <option value="auto">Auto</option>
+                                    <option value="mic">Microphone</option>
+                                    <option value="loopback">Meeting Audio (Loopback)</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <span class="setting-label">Interview Answer Model</span>
+                                    <span class="setting-desc">Fast model used for interview answers</span>
+                                </div>
+                                <input id="interview-model-input" class="provider-input" type="text" value="mistral/mistral-small-latest" />
+                            </div>
                         </div>
                     </div>
                 </div>

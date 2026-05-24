@@ -39,7 +39,7 @@ GLOBAL_SESSION_KEY = "_global"  # shared memory pool across all windows/models
 # We skip:
 # - backtick/live: quick grammar/autocomplete
 # - clipboard / clipboard_with_instruction: explicit single-turn transforms (Ctrl+Shift+D)
-SKIP_MEMORY_MODES = {"backtick", "live", "clipboard", "clipboard_with_instruction"}
+SKIP_MEMORY_MODES = {"backtick", "live", "clipboard", "clipboard_with_instruction", "interview_qa"}
 
 
 def _normalize_window_title(title):

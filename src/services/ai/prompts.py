@@ -685,6 +685,14 @@ def build_prompt(text, user_instruction=None, mode='clipboard'):
     Returns: (system_prompt, user_prompt)
     """
 
+    # Interview Q&A mode: always direct concise answer
+    if mode == 'interview_qa':
+        system_prompt = SYSTEM_PROMPTS['question']
+        user_prompt = f"""{text}
+
+Answer directly in 2-4 sentences. No bullets. No markdown."""
+        return (system_prompt, user_prompt)
+
     # Custom instruction provided
     if user_instruction and user_instruction.strip():
         system_prompt = SYSTEM_PROMPTS['custom']

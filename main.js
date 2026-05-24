@@ -50,6 +50,7 @@ function applyGhostModeToAllWindows() {
   if (explanationWindow && !explanationWindow.isDestroyed()) applyWindowCaptureAffinity(explanationWindow);
   if (settingsWindow && !settingsWindow.isDestroyed()) applyWindowCaptureAffinity(settingsWindow);
   if (chatWindow && !chatWindow.isDestroyed()) applyWindowCaptureAffinity(chatWindow);
+  if (interviewWindow && !interviewWindow.isDestroyed()) applyWindowCaptureAffinity(interviewWindow);
 }
 
 function applyOpacityToAllWindows() {
@@ -59,6 +60,7 @@ function applyOpacityToAllWindows() {
   if (explanationWindow && !explanationWindow.isDestroyed()) explanationWindow.setOpacity(alpha);
   if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.setOpacity(alpha);
   if (chatWindow && !chatWindow.isDestroyed()) chatWindow.setOpacity(alpha);
+  if (interviewWindow && !interviewWindow.isDestroyed()) interviewWindow.setOpacity(alpha);
 }
 
 // Try to load robotjs, but handle errors gracefully
@@ -83,12 +85,16 @@ let mainWindow = null;
 let outputWindow = null;
 let settingsWindow = null;
 let chatWindow = null;
+let interviewWindow = null;
 let isWindowVisible = false;
 
 // Chat streaming state (separate from prompt bar)
 let pendingChatRequest = null;  // { conversationId, resolve, reject, text }
 let chatStreamActive = false;
 let chatConversationMemoryEnabled = true;
+let pendingInterviewRequest = null; // { question, text, startedAt }
+let interviewStreamActive = false;
+let queuedInterviewQuestion = null;
 
 // Context management configuration
 const CHAT_CONTEXT_WINDOW_SIZE = 50; // Maximum messages to send for context
@@ -163,6 +169,9 @@ let autoInjectEnabled = false;
 
 // Live mode (auto-suggestion on typing pause)
 let liveModeEnabled = false;
+let interviewModeEnabled = false;
+let interviewAudioSource = 'auto'; // auto | mic | loopback
+let interviewAgent = 'mistral/mistral-small-latest';
 
 // Coding mode (show code + explanation windows for interviews)
 let codingModeEnabled = false;
@@ -170,6 +179,8 @@ let explanationWindow = null;
 
 // Ultra Human typing mode (chain-of-thought code injection for interviews)
 let ultraHumanEnabled = false;
+let interviewListener = null;
+let interviewListenerRL = null;
 
 // Load and cache environment/config once at startup
 function loadCachedConfig() {
@@ -572,6 +583,216 @@ function createChatWindow() {
   });
 }
 
+function createInterviewWindow() {
+  if (interviewWindow) {
+    interviewWindow.focus();
+    return;
+  }
+
+  const { screen } = require('electron');
+  const display = screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+
+  const windowWidth = 400;
+  const windowHeight = 800;
+  const x = Math.max(workArea.x, workArea.x + workArea.width - windowWidth - 20);
+  const y = Math.max(workArea.y, workArea.y + Math.round((workArea.height - windowHeight) / 2));
+
+  interviewWindow = new BrowserWindow({
+    width: windowWidth,
+    height: windowHeight,
+    minWidth: 360,
+    minHeight: 500,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    x: x,
+    y: y,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  interviewWindow.loadFile(path.join('src', 'renderer', 'interview', 'index.html'));
+  applyWindowCaptureAffinity(interviewWindow);
+  interviewWindow.setOpacity(windowOpacity);
+
+  interviewWindow.on('closed', () => {
+    interviewWindow = null;
+    interviewStreamActive = false;
+    pendingInterviewRequest = null;
+  });
+}
+
+function sendToInterviewListener(command) {
+  if (interviewListener && interviewListener.stdin) {
+    interviewListener.stdin.write(JSON.stringify(command) + '\n');
+    return true;
+  }
+  return false;
+}
+
+function stopInterviewListener() {
+  if (!interviewListener) return;
+  sendToInterviewListener({ cmd: 'shutdown' });
+  setTimeout(() => {
+    if (interviewListener) {
+      interviewListener.kill();
+    }
+  }, 1000);
+}
+
+function startInterviewListener() {
+  if (interviewListener) return;
+  const pythonScript = path.join(__dirname, 'src', 'services', 'media', 'interview_listener.py');
+  const env = cachedEnv || process.env;
+
+  interviewListener = spawn(getPythonCommand(), [pythonScript], {
+    cwd: __dirname,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env
+  });
+
+  interviewListenerRL = readline.createInterface({
+    input: interviewListener.stdout,
+    crlfDelay: Infinity
+  });
+
+  interviewListenerRL.on('line', (line) => {
+    try {
+      const event = JSON.parse(line);
+      handleInterviewListenerEvent(event);
+    } catch (e) {
+      console.error('Failed to parse interview listener event:', line, e);
+    }
+  });
+
+  interviewListener.stderr.on('data', (data) => {
+    console.log('Interview listener debug:', data.toString());
+  });
+
+  interviewListener.on('close', () => {
+    interviewListener = null;
+    interviewListenerRL = null;
+  });
+
+  interviewListener.on('error', (err) => {
+    console.error('Failed to start interview listener:', err.message);
+  });
+
+  sendToInterviewListener({ cmd: 'set_source', source: interviewAudioSource });
+  sendToInterviewListener({ cmd: 'start' });
+}
+
+function generateInterviewStreaming(question) {
+  if (!question || !question.trim()) return;
+  if (interviewStreamActive) {
+    queuedInterviewQuestion = question.trim();
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-listener-status', {
+        status: 'transcribing',
+        message: 'New question queued...'
+      });
+    }
+    return;
+  }
+  if (!aiBackendReady) {
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-stream-error', 'AI backend not ready');
+    }
+    return;
+  }
+
+  interviewStreamActive = true;
+  pendingInterviewRequest = { question: question.trim(), text: '', startedAt: Date.now() };
+
+  if (!interviewWindow || interviewWindow.isDestroyed()) {
+    createInterviewWindow();
+  }
+  if (interviewWindow && !interviewWindow.isDestroyed()) {
+    interviewWindow.showInactive();
+    interviewWindow.webContents.send('interview-question', pendingInterviewRequest.question);
+    interviewWindow.webContents.send('interview-stream-start');
+  }
+
+  const sent = sendToAIBackend({
+    cmd: 'generate',
+    prompt: pendingInterviewRequest.question,
+    context: {
+      mode: 'interview_qa',
+      agent: interviewAgent || 'mistral/mistral-small-latest',
+      window: 'interview'
+    },
+    streaming: true
+  });
+
+  if (!sent) {
+    interviewStreamActive = false;
+    pendingInterviewRequest = null;
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-stream-error', 'Failed to send to AI backend');
+    }
+    return;
+  }
+
+  setTimeout(() => {
+    if (interviewStreamActive && pendingInterviewRequest) {
+      const partialText = filterPreamble(pendingInterviewRequest.text);
+      interviewStreamActive = false;
+      pendingInterviewRequest = null;
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.webContents.send('interview-stream-end', { text: partialText, timedOut: true });
+      }
+      if (queuedInterviewQuestion) {
+        const nextQuestion = queuedInterviewQuestion;
+        queuedInterviewQuestion = null;
+        generateInterviewStreaming(nextQuestion);
+      }
+    }
+  }, 90000);
+}
+
+function handleInterviewListenerEvent(event) {
+  if (!event || !event.event) return;
+
+  if (event.event === 'started' || event.event === 'listening') {
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-listener-status', {
+        status: event.event === 'started' ? 'ready' : 'listening',
+        message: event.message || ''
+      });
+    }
+    return;
+  }
+
+  if (event.event === 'partial') {
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-partial-question', event.text || '');
+    }
+    return;
+  }
+
+  if (event.event === 'question') {
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-listener-status', {
+        status: 'transcribing',
+        message: 'Question detected'
+      });
+    }
+    generateInterviewStreaming(event.text || '');
+    return;
+  }
+
+  if (event.event === 'error') {
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-stream-error', event.message || 'Interview listener error');
+    }
+  }
+}
+
 function generateChatStreaming(conversationId, userMessage, apiMessages) {
   if (!aiBackendReady) {
     if (chatWindow && !chatWindow.isDestroyed()) {
@@ -771,6 +992,9 @@ function startAIBackend() {
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send('ai-backend-status', status);
     }
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('ai-backend-status', status);
+    }
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.webContents.send('ai-backend-status', status);
     }
@@ -800,6 +1024,9 @@ function sendToAIBackend(command) {
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send('ai-backend-status', status);
     }
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('ai-backend-status', status);
+    }
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.webContents.send('ai-backend-status', status);
     }
@@ -819,6 +1046,9 @@ function sendToAIBackend(command) {
     }
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('ai-backend-status', status);
     }
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.webContents.send('ai-backend-status', status);
@@ -875,6 +1105,9 @@ function handleAIBackendEvent(event) {
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send('ai-backend-status', readyStatus);
     }
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('ai-backend-status', readyStatus);
+    }
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.webContents.send('ai-backend-status', readyStatus);
     }
@@ -922,6 +1155,24 @@ function handleAIBackendEvent(event) {
         saveChatMessage(convId, assistantMsg);
         if (chatWindow && !chatWindow.isDestroyed()) {
           chatWindow.webContents.send('chat-stream-end', { text: fullText, messageId: assistantMsg.id });
+        }
+      }
+    } else if (interviewStreamActive && pendingInterviewRequest) {
+      pendingInterviewRequest.text += event.text;
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.webContents.send('interview-stream-chunk', event.text);
+      }
+      if (event.final) {
+        const fullText = filterPreamble(pendingInterviewRequest.text);
+        interviewStreamActive = false;
+        pendingInterviewRequest = null;
+        if (interviewWindow && !interviewWindow.isDestroyed()) {
+          interviewWindow.webContents.send('interview-stream-end', { text: fullText });
+        }
+        if (queuedInterviewQuestion) {
+          const nextQuestion = queuedInterviewQuestion;
+          queuedInterviewQuestion = null;
+          generateInterviewStreaming(nextQuestion);
         }
       }
     } else if (pendingAIRequest && pendingAIRequest.streaming) {
@@ -973,6 +1224,18 @@ function handleAIBackendEvent(event) {
       pendingAIRequest.reject(new Error(event.message));
       pendingAIRequest = null;
       routed = true;
+    } else if (interviewStreamActive && pendingInterviewRequest) {
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.webContents.send('interview-stream-error', event.message);
+      }
+      interviewStreamActive = false;
+      pendingInterviewRequest = null;
+      if (queuedInterviewQuestion) {
+        const nextQuestion = queuedInterviewQuestion;
+        queuedInterviewQuestion = null;
+        generateInterviewStreaming(nextQuestion);
+      }
+      routed = true;
     }
 
     // If error wasn't tied to an active request, surface it as a backend status message
@@ -986,6 +1249,9 @@ function handleAIBackendEvent(event) {
       }
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send('ai-backend-status', status);
+      }
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.webContents.send('ai-backend-status', status);
       }
       if (settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.webContents.send('ai-backend-status', status);
@@ -1002,6 +1268,9 @@ function handleAIBackendEvent(event) {
     }
     if (chatWindow && !chatWindow.isDestroyed()) {
       chatWindow.webContents.send('ai-backend-status', status);
+    }
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('ai-backend-status', status);
     }
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.webContents.send('ai-backend-status', status);
@@ -1696,6 +1965,50 @@ app.whenReady().then(() => {
     console.log('Ctrl+Shift+C shortcut registered successfully');
   }
 
+  // Register Ctrl+Shift+I for interview mode toggle
+  const interviewToggleShortcut = globalShortcut.register('CommandOrControl+Shift+I', () => {
+    interviewModeEnabled = !interviewModeEnabled;
+    if (interviewModeEnabled) {
+      ghostModeEnabled = true;
+      applyGhostModeToAllWindows();
+      createInterviewWindow();
+      startInterviewListener();
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.showInactive();
+        interviewWindow.webContents.send('interview-listener-status', { status: 'listening', message: 'Listening...' });
+      }
+    } else {
+      if (interviewWindow && !interviewWindow.isDestroyed()) {
+        interviewWindow.hide();
+      }
+      stopInterviewListener();
+      interviewStreamActive = false;
+      pendingInterviewRequest = null;
+      queuedInterviewQuestion = null;
+    }
+    console.log('Interview mode enabled:', interviewModeEnabled);
+  });
+
+  // Register Ctrl+Alt+I to force question capture and answer now
+  const interviewForceShortcut = globalShortcut.register('CommandOrControl+Alt+I', () => {
+    if (!interviewModeEnabled) {
+      interviewModeEnabled = true;
+      createInterviewWindow();
+      startInterviewListener();
+    }
+    const ok = sendToInterviewListener({ cmd: 'force' });
+    if (!ok && interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.webContents.send('interview-stream-error', 'Interview listener is not running');
+    }
+  });
+
+  if (interviewToggleShortcut) {
+    console.log('Ctrl+Shift+I shortcut registered successfully');
+  }
+  if (interviewForceShortcut) {
+    console.log('Ctrl+Alt+I shortcut registered successfully');
+  }
+
   // Register Ctrl+Shift+P to paste generated text using Python injection
   const pasteShortcut = globalShortcut.register('CommandOrControl+Shift+P', async () => {
     if (lastGeneratedText) {
@@ -1911,6 +2224,8 @@ app.on('will-quit', () => {
   stopKeystrokeMonitor();
   // Stop AI backend service
   stopAIBackend();
+  // Stop interview listener service
+  stopInterviewListener();
 });
 
 // Voice recording functions for hold-to-talk
@@ -2196,6 +2511,22 @@ ipcMain.on('settings-init-sync', (event, s) => {
     }
     if (s.codingModeEnabled !== undefined) codingModeEnabled = s.codingModeEnabled;
     if (s.ultraHumanEnabled !== undefined) ultraHumanEnabled = s.ultraHumanEnabled;
+    if (s.interviewModeEnabled !== undefined) {
+      interviewModeEnabled = s.interviewModeEnabled;
+      if (interviewModeEnabled) {
+        startInterviewListener();
+        if (!interviewWindow || interviewWindow.isDestroyed()) createInterviewWindow();
+      } else {
+        stopInterviewListener();
+      }
+    }
+    if (s.interviewAudioSource !== undefined) {
+      interviewAudioSource = s.interviewAudioSource || 'auto';
+      sendToInterviewListener({ cmd: 'set_source', source: interviewAudioSource });
+    }
+    if (s.interviewAgent !== undefined) {
+      interviewAgent = s.interviewAgent || 'mistral/mistral-small-latest';
+    }
     if (s.ghostModeEnabled !== undefined) {
       ghostModeEnabled = s.ghostModeEnabled;
       applyGhostModeToAllWindows();
@@ -2227,6 +2558,7 @@ ipcMain.on('settings-master-toggle', (event, enabled) => {
     monitorRestartCount = 0;
     stopKeystrokeMonitor();
     stopAIBackend();
+    stopInterviewListener();
     aiBackendReady = false;
   } else {
     // Re-enable services when master is turned back on
@@ -2236,6 +2568,9 @@ ipcMain.on('settings-master-toggle', (event, enabled) => {
     }
     if (!aiBackend) {
       startAIBackend();
+    }
+    if (interviewModeEnabled && !interviewListener) {
+      startInterviewListener();
     }
   }
 
@@ -2249,6 +2584,9 @@ ipcMain.on('settings-master-toggle', (event, enabled) => {
   }
   if (chatWindow && !chatWindow.isDestroyed()) {
     chatWindow.webContents.send('ai-backend-status', status);
+  }
+  if (interviewWindow && !interviewWindow.isDestroyed()) {
+    interviewWindow.webContents.send('ai-backend-status', status);
   }
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send('ai-backend-status', status);
@@ -2264,6 +2602,9 @@ ipcMain.handle('get-settings-state', async () => {
     liveModeEnabled,
     codingModeEnabled,
     ultraHumanEnabled,
+    interviewModeEnabled,
+    interviewAudioSource,
+    interviewAgent,
     ghostModeEnabled,
     windowOpacity
   };
@@ -2300,6 +2641,35 @@ ipcMain.on('settings-coding-mode-toggle', (event, enabled) => {
 ipcMain.on('settings-ultra-human-toggle', (event, enabled) => {
   ultraHumanEnabled = enabled;
   console.log('Ultra Human typing enabled:', ultraHumanEnabled);
+});
+
+ipcMain.on('settings-interview-mode-toggle', (event, enabled) => {
+  interviewModeEnabled = !!enabled;
+  if (interviewModeEnabled) {
+    ghostModeEnabled = true;
+    applyGhostModeToAllWindows();
+    createInterviewWindow();
+    startInterviewListener();
+    if (interviewWindow && !interviewWindow.isDestroyed()) {
+      interviewWindow.showInactive();
+      interviewWindow.webContents.send('interview-listener-status', { status: 'listening', message: 'Listening...' });
+    }
+  } else {
+    stopInterviewListener();
+    if (interviewWindow && !interviewWindow.isDestroyed()) interviewWindow.hide();
+    interviewStreamActive = false;
+    pendingInterviewRequest = null;
+    queuedInterviewQuestion = null;
+  }
+});
+
+ipcMain.on('settings-interview-audio-source', (event, source) => {
+  interviewAudioSource = source || 'auto';
+  sendToInterviewListener({ cmd: 'set_source', source: interviewAudioSource });
+});
+
+ipcMain.on('settings-interview-model-change', (event, model) => {
+  interviewAgent = model || 'mistral/mistral-small-latest';
 });
 
 // IPC handler for agent selection change
@@ -2844,4 +3214,19 @@ ipcMain.on('chat-stop-generation', () => {
 
 ipcMain.on('chat-close-window', () => {
   if (chatWindow) chatWindow.close();
+});
+
+ipcMain.on('interview-close-window', () => {
+  if (interviewWindow) interviewWindow.hide();
+});
+
+ipcMain.on('interview-force-capture', () => {
+  if (!interviewModeEnabled) {
+    interviewModeEnabled = true;
+    createInterviewWindow();
+    startInterviewListener();
+  }
+  if (!sendToInterviewListener({ cmd: 'force' }) && interviewWindow && !interviewWindow.isDestroyed()) {
+    interviewWindow.webContents.send('interview-stream-error', 'Interview listener is not running');
+  }
 });

@@ -18,6 +18,7 @@ MODE_TO_GROUP = {
     "live":                     "fast",
     "clipboard":                "fast",       # default for clipboard; overridden below for code
     "clipboard_with_instruction": "powerful",
+    "interview_qa":             "fast",
     "explanation":              "reasoning",
     "prompt":                   "powerful",
     "chat":                     "powerful",
