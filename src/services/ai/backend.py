@@ -40,36 +40,38 @@ class IPC:
     """Handles stdin/stdout communication with Electron."""
 
     @staticmethod
-    def send(data):
+    def send(data, request_id=None):
         """Send JSON message to Electron."""
         try:
+            if request_id:
+                data["request_id"] = request_id
             print(json.dumps(data), flush=True)
         except Exception as e:
             print(f"[IPC] Send failed: {e}", file=sys.stderr)
 
     @staticmethod
-    def send_error(message):
+    def send_error(message, request_id=None):
         """Send error event."""
-        IPC.send({"event": "error", "message": message})
+        IPC.send({"event": "error", "message": message}, request_id=request_id)
 
     @staticmethod
-    def send_status(message):
+    def send_status(message, request_id=None):
         """Send non-fatal status event (informational)."""
-        IPC.send({"event": "status", "message": message})
+        IPC.send({"event": "status", "message": message}, request_id=request_id)
 
     @staticmethod
-    def send_chunk(text, is_final=False):
+    def send_chunk(text, is_final=False, request_id=None):
         """Send streaming chunk."""
         IPC.send({
             "event": "chunk",
             "text": text,
             "final": is_final
-        })
+        }, request_id=request_id)
 
     @staticmethod
-    def send_complete(text):
+    def send_complete(text, request_id=None):
         """Send complete response."""
-        IPC.send({"event": "complete", "text": text})
+        IPC.send({"event": "complete", "text": text}, request_id=request_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -229,7 +231,7 @@ def _is_rate_limit_error(error_str):
     return any(sig in error_lower for sig in rate_signals)
 
 
-def generate_streaming(prompt, context, provider_manager):
+def generate_streaming(prompt, context, provider_manager, request_id=None):
     """Generate text with streaming output via LiteLLM."""
     messages = build_messages(prompt, context)
 
@@ -239,8 +241,8 @@ def generate_streaming(prompt, context, provider_manager):
     model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
 
     if not model:
-        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
-        IPC.send_chunk("", is_final=True)
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.", request_id=request_id)
+        IPC.send_chunk("", is_final=True, request_id=request_id)
         return ""
 
     # Determine model group for memory
@@ -260,11 +262,11 @@ def generate_streaming(prompt, context, provider_manager):
         try:
             for chunk in provider_manager.stream(model, messages):
                 full_text += chunk
-                IPC.send_chunk(chunk, is_final=False)
+                IPC.send_chunk(chunk, is_final=False, request_id=request_id)
 
             # Clean and finalize
             full_text = clean_response(full_text)
-            IPC.send_chunk("", is_final=True)
+            IPC.send_chunk("", is_final=True, request_id=request_id)
 
             # Store interaction in memory
             provider_manager.store_interaction(window_title, prompt, full_text, group, mode)
@@ -278,15 +280,15 @@ def generate_streaming(prompt, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""  # reset partial output
                     provider_switches += 1
                     continue
                 else:
-                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.")
-                    IPC.send_chunk("", is_final=True)
+                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.", request_id=request_id)
+                    IPC.send_chunk("", is_final=True, request_id=request_id)
                     # Return empty string so the caller never mistakes this for valid model output
                     return ""
 
@@ -295,34 +297,34 @@ def generate_streaming(prompt, context, provider_manager):
                 if retries < MAX_RETRIES:
                     time.sleep(RETRY_DELAY * retries)
                     continue
-                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
-                IPC.send_chunk("", is_final=True)
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.", request_id=request_id)
+                IPC.send_chunk("", is_final=True, request_id=request_id)
                 return ""
 
             if _is_rate_limit_error(error_str):
                 # Rate limited / quota exceeded → try fallback to a different provider
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
                     provider_switches += 1
                     continue
-                IPC.send_error("API rate limit exceeded on all providers.")
-                IPC.send_chunk("", is_final=True)
+                IPC.send_error("API rate limit exceeded on all providers.", request_id=request_id)
+                IPC.send_chunk("", is_final=True, request_id=request_id)
                 return ""
 
-            IPC.send_error(f"Generation error: {error_str}")
-            IPC.send_chunk("", is_final=True)
+            IPC.send_error(f"Generation error: {error_str}", request_id=request_id)
+            IPC.send_chunk("", is_final=True, request_id=request_id)
             return ""
 
-    IPC.send_error("Failed after multiple attempts.")
-    IPC.send_chunk("", is_final=True)
+    IPC.send_error("Failed after multiple attempts.", request_id=request_id)
+    IPC.send_chunk("", is_final=True, request_id=request_id)
     return ""
 
 
-def generate_non_streaming(prompt, context, provider_manager):
+def generate_non_streaming(prompt, context, provider_manager, request_id=None):
     """Generate text without streaming (fallback)."""
     messages = build_messages(prompt, context)
 
@@ -332,7 +334,7 @@ def generate_non_streaming(prompt, context, provider_manager):
 
     if not model:
         # Surface via IPC so Electron can show a proper error state
-        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.", request_id=request_id)
         return ""
 
     group = provider_manager.get_model_group(model)
@@ -351,7 +353,7 @@ def generate_non_streaming(prompt, context, provider_manager):
                 text = clean_response(text)
                 provider_manager.store_interaction(window_title, prompt, text, group, mode)
                 return text
-            IPC.send_error("No content in LLM response.")
+            IPC.send_error("No content in LLM response.", request_id=request_id)
             return ""
 
         except Exception as e:
@@ -361,12 +363,12 @@ def generate_non_streaming(prompt, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
                     continue
-                IPC.send_error("Invalid API key and no fallback available.")
+                IPC.send_error("Invalid API key and no fallback available.", request_id=request_id)
                 return ""
 
             if '503' in error_str or 'overloaded' in error_str.lower():
@@ -374,24 +376,24 @@ def generate_non_streaming(prompt, context, provider_manager):
                 if retries < MAX_RETRIES:
                     time.sleep(RETRY_DELAY * retries)
                     continue
-                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.", request_id=request_id)
                 return ""
 
             if _is_rate_limit_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     provider_switches += 1
                     continue
-                IPC.send_error("API rate limit exceeded on all providers.")
+                IPC.send_error("API rate limit exceeded on all providers.", request_id=request_id)
                 return ""
 
-            IPC.send_error(f"Generation error: {error_str}")
+            IPC.send_error(f"Generation error: {error_str}", request_id=request_id)
             return ""
 
-    IPC.send_error("Failed after multiple attempts.")
+    IPC.send_error("Failed after multiple attempts.", request_id=request_id)
     return ""
 
 
@@ -421,7 +423,7 @@ def clean_response(text):
 # REQUEST HANDLER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def generate_streaming_with_messages(messages, context, provider_manager):
+def generate_streaming_with_messages(messages, context, provider_manager, request_id=None):
     """Generate streaming response using pre-built messages (for chat mode).
     Also integrates cross-model memory so chat can see prompt bar interactions."""
     agent = context.get("agent", "auto") if context else "auto"
@@ -436,8 +438,8 @@ def generate_streaming_with_messages(messages, context, provider_manager):
     model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
 
     if not model:
-        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
-        IPC.send_chunk("", is_final=True)
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.", request_id=request_id)
+        IPC.send_chunk("", is_final=True, request_id=request_id)
         return ""
 
     group = provider_manager.get_model_group(model)
@@ -454,10 +456,10 @@ def generate_streaming_with_messages(messages, context, provider_manager):
         try:
             for chunk in provider_manager.stream(model, messages):
                 full_text += chunk
-                IPC.send_chunk(chunk, is_final=False)
+                IPC.send_chunk(chunk, is_final=False, request_id=request_id)
 
             full_text = clean_response(full_text)
-            IPC.send_chunk("", is_final=True)
+            IPC.send_chunk("", is_final=True, request_id=request_id)
 
             # Store in cross-model memory so prompt bar can see chat interactions
             provider_manager.store_interaction(window_title, prompt, full_text, group, mode)
@@ -470,15 +472,15 @@ def generate_streaming_with_messages(messages, context, provider_manager):
             if _is_auth_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
                     provider_switches += 1
                     continue
                 else:
-                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.")
-                    IPC.send_chunk("", is_final=True)
+                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.", request_id=request_id)
+                    IPC.send_chunk("", is_final=True, request_id=request_id)
                     return ""
 
             if '503' in error_str or 'overloaded' in error_str.lower():
@@ -486,35 +488,36 @@ def generate_streaming_with_messages(messages, context, provider_manager):
                 if retries < MAX_RETRIES:
                     time.sleep(RETRY_DELAY * retries)
                     continue
-                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
-                IPC.send_chunk("", is_final=True)
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.", request_id=request_id)
+                IPC.send_chunk("", is_final=True, request_id=request_id)
                 return ""
 
             if _is_rate_limit_error(error_str):
                 fallback = provider_manager.get_fallback_model(model)
                 if fallback:
-                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    IPC.send_status(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...", request_id=request_id)
                     model = fallback
                     group = provider_manager.get_model_group(model)
                     full_text = ""
                     provider_switches += 1
                     continue
-                IPC.send_error("API rate limit exceeded on all providers.")
-                IPC.send_chunk("", is_final=True)
+                IPC.send_error("API rate limit exceeded on all providers.", request_id=request_id)
+                IPC.send_chunk("", is_final=True, request_id=request_id)
                 return ""
 
-            IPC.send_error(f"Generation error: {error_str}")
-            IPC.send_chunk("", is_final=True)
+            IPC.send_error(f"Generation error: {error_str}", request_id=request_id)
+            IPC.send_chunk("", is_final=True, request_id=request_id)
             return ""
 
-    IPC.send_error("Failed after multiple attempts.")
-    IPC.send_chunk("", is_final=True)
+    IPC.send_error("Failed after multiple attempts.", request_id=request_id)
+    IPC.send_chunk("", is_final=True, request_id=request_id)
     return ""
 
 
 def handle_request(request, provider_manager):
     """Handle incoming request from Electron."""
     cmd = request.get("cmd", "")
+    request_id = request.get("request_id")
 
     if cmd == "generate":
         prompt = request.get("prompt", "")
@@ -525,21 +528,21 @@ def handle_request(request, provider_manager):
         # Chat mode: use pre-built messages (includes full conversation history)
         if pre_built_messages:
             if streaming:
-                generate_streaming_with_messages(pre_built_messages, context, provider_manager)
+                generate_streaming_with_messages(pre_built_messages, context, provider_manager, request_id=request_id)
             else:
                 # Non-streaming fallback for chat (unlikely path)
-                generate_streaming_with_messages(pre_built_messages, context, provider_manager)
+                generate_streaming_with_messages(pre_built_messages, context, provider_manager, request_id=request_id)
             return
 
         if not prompt:
-            IPC.send({"event": "complete", "text": "", "error": "Empty prompt"})
+            IPC.send({"event": "complete", "text": "", "error": "Empty prompt"}, request_id=request_id)
             return
 
         if streaming:
-            generate_streaming(prompt, context, provider_manager)
+            generate_streaming(prompt, context, provider_manager, request_id=request_id)
         else:
-            text = generate_non_streaming(prompt, context, provider_manager)
-            IPC.send_complete(text)
+            text = generate_non_streaming(prompt, context, provider_manager, request_id=request_id)
+            IPC.send_complete(text, request_id=request_id)
 
     elif cmd == "ping":
         IPC.send({"event": "pong"})

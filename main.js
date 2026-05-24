@@ -706,21 +706,28 @@ function generateInterviewStreaming(question) {
     return;
   }
 
+  const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
   interviewStreamActive = true;
-  pendingInterviewRequest = { question: question.trim(), text: '', startedAt: Date.now() };
+  pendingInterviewRequest = { 
+    question: question.trim(), 
+    text: '', 
+    startedAt: Date.now(),
+    requestId: requestId
+  };       
 
   if (!interviewWindow || interviewWindow.isDestroyed()) {
     createInterviewWindow();
   }
   if (interviewWindow && !interviewWindow.isDestroyed()) {
     interviewWindow.showInactive();
-    interviewWindow.webContents.send('interview-question', pendingInterviewRequest.question);
+    interviewWindow.webContents.send('interview-question', pendingInterviewRequest.question);     
     interviewWindow.webContents.send('interview-stream-start');
   }
 
   const sent = sendToAIBackend({
     cmd: 'generate',
     prompt: pendingInterviewRequest.question,
+    request_id: requestId,
     context: {
       mode: 'interview_qa',
       agent: interviewAgent || 'mistral/mistral-small-latest',
@@ -728,7 +735,6 @@ function generateInterviewStreaming(question) {
     },
     streaming: true
   });
-
   if (!sent) {
     interviewStreamActive = false;
     pendingInterviewRequest = null;
@@ -738,8 +744,8 @@ function generateInterviewStreaming(question) {
     return;
   }
 
-  setTimeout(() => {
-    if (interviewStreamActive && pendingInterviewRequest) {
+  const timeoutId = setTimeout(() => {
+    if (interviewStreamActive && pendingInterviewRequest && pendingInterviewRequest.requestId === requestId) {
       const partialText = filterPreamble(pendingInterviewRequest.text);
       interviewStreamActive = false;
       pendingInterviewRequest = null;
@@ -764,6 +770,14 @@ function handleInterviewListenerEvent(event) {
         status: event.event === 'started' ? 'ready' : 'listening',
         message: event.message || ''
       });
+    }
+    return;
+  }
+
+  if (event.event === 'devices') {
+    if (pendingBackendCallbacks['interview_devices']) {
+      pendingBackendCallbacks['interview_devices'](event.devices || []);
+      delete pendingBackendCallbacks['interview_devices'];
     }
     return;
   }
@@ -793,6 +807,27 @@ function handleInterviewListenerEvent(event) {
   }
 }
 
+ipcMain.handle('interview-get-devices', async () => {
+  return new Promise((resolve) => {
+    if (!interviewListener) {
+      resolve([]);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      delete pendingBackendCallbacks['interview_devices'];
+      resolve([]);
+    }, 3000);
+
+    pendingBackendCallbacks['interview_devices'] = (devices) => {
+      clearTimeout(timeout);
+      resolve(devices);
+    };
+
+    sendToInterviewListener({ cmd: 'get_devices' });
+  });
+});
+
 function generateChatStreaming(conversationId, userMessage, apiMessages) {
   if (!aiBackendReady) {
     if (chatWindow && !chatWindow.isDestroyed()) {
@@ -801,10 +836,12 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
     return;
   }
 
+  const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
   chatStreamActive = true;
   pendingChatRequest = {
     conversationId,
-    text: ''
+    text: '',
+    requestId: requestId
   };
 
   if (chatWindow && !chatWindow.isDestroyed()) {
@@ -815,6 +852,7 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
     cmd: 'generate',
     prompt: userMessage,
     messages: apiMessages,
+    request_id: requestId,
     context: { mode: 'chat', agent: chatAgent, window: 'chat' },
     streaming: true
   });
@@ -828,9 +866,8 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
     return;
   }
 
-  // 120s timeout for chat (longer than prompt bar's 60s)
-  setTimeout(() => {
-    if (chatStreamActive && pendingChatRequest && pendingChatRequest.conversationId === conversationId) {
+  const timeoutId = setTimeout(() => {
+    if (chatStreamActive && pendingChatRequest && pendingChatRequest.requestId === requestId) {
       const partialText = filterPreamble(pendingChatRequest.text);
       chatStreamActive = false;
       pendingChatRequest = null;
@@ -1133,8 +1170,13 @@ function handleAIBackendEvent(event) {
     }
 
   } else if (event.event === 'chunk') {
+    const eventRequestId = event.request_id;
     // Streaming chunk received — route to chat or prompt bar
     if (chatStreamActive && pendingChatRequest) {
+      if (eventRequestId && eventRequestId !== pendingChatRequest.requestId) {
+        console.log('Discarding stale chat chunk:', eventRequestId);
+        return;
+      }
       pendingChatRequest.text += event.text;
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send('chat-stream-chunk', event.text);
@@ -1158,6 +1200,10 @@ function handleAIBackendEvent(event) {
         }
       }
     } else if (interviewStreamActive && pendingInterviewRequest) {
+      if (eventRequestId && eventRequestId !== pendingInterviewRequest.requestId) {
+        console.log('Discarding stale interview chunk:', eventRequestId);
+        return;
+      }
       pendingInterviewRequest.text += event.text;
       if (interviewWindow && !interviewWindow.isDestroyed()) {
         interviewWindow.webContents.send('interview-stream-chunk', event.text);
@@ -1176,6 +1222,10 @@ function handleAIBackendEvent(event) {
         }
       }
     } else if (pendingAIRequest && pendingAIRequest.streaming) {
+      if (eventRequestId && eventRequestId !== pendingAIRequest.requestId) {
+        console.log('Discarding stale prompt chunk:', eventRequestId);
+        return;
+      }
       pendingAIRequest.text += event.text;
 
       // Send to output window for live display
@@ -1203,16 +1253,26 @@ function handleAIBackendEvent(event) {
     }
 
   } else if (event.event === 'complete') {
+    const eventRequestId = event.request_id;
     // Non-streaming complete response
     if (pendingAIRequest && pendingAIRequest.resolve) {
+      if (eventRequestId && eventRequestId !== pendingAIRequest.requestId) {
+        console.log('Discarding stale prompt complete:', eventRequestId);
+        return;
+      }
       pendingAIRequest.resolve({ text: event.text });
       pendingAIRequest = null;
     }
 
   } else if (event.event === 'error') {
     console.error('AI backend error:', event.message);
+    const eventRequestId = event.request_id;
     let routed = false;
     if (chatStreamActive && pendingChatRequest) {
+      if (eventRequestId && eventRequestId !== pendingChatRequest.requestId) {
+        console.log('Discarding stale chat error:', eventRequestId);
+        return;
+      }
       // Route error to chat window
       if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.send('chat-stream-error', event.message);
@@ -1221,10 +1281,18 @@ function handleAIBackendEvent(event) {
       pendingChatRequest = null;
       routed = true;
     } else if (pendingAIRequest && pendingAIRequest.reject) {
+      if (eventRequestId && eventRequestId !== pendingAIRequest.requestId) {
+        console.log('Discarding stale prompt error:', eventRequestId);
+        return;
+      }
       pendingAIRequest.reject(new Error(event.message));
       pendingAIRequest = null;
       routed = true;
     } else if (interviewStreamActive && pendingInterviewRequest) {
+      if (eventRequestId && eventRequestId !== pendingInterviewRequest.requestId) {
+        console.log('Discarding stale interview error:', eventRequestId);
+        return;
+      }
       if (interviewWindow && !interviewWindow.isDestroyed()) {
         interviewWindow.webContents.send('interview-stream-error', event.message);
       }
@@ -1341,19 +1409,22 @@ async function generateTextStreaming(mode, buffer, extraParam = null, autoInject
       outputWindow.webContents.send('stream-start');
     }
 
+    const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
     // Set up pending request
     pendingAIRequest = {
       resolve,
       reject,
       streaming: true,
       autoInject,
-      text: ''
+      text: '',
+      requestId: requestId
     };
 
     // Send request to backend
     const sent = sendToAIBackend({
       cmd: 'generate',
       prompt: buffer,
+      request_id: requestId,
       context: context,
       streaming: true
     });
@@ -1364,8 +1435,8 @@ async function generateTextStreaming(mode, buffer, extraParam = null, autoInject
     }
 
     // Timeout after 60 seconds
-    setTimeout(() => {
-      if (pendingAIRequest) {
+    const timeoutId = setTimeout(() => {
+      if (pendingAIRequest && pendingAIRequest.requestId === requestId) {
         const partialText = pendingAIRequest.text;
         pendingAIRequest = null;
         if (partialText) {

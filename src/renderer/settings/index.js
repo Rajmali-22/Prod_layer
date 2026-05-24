@@ -54,7 +54,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupSidebarNavigation();
     updateUI();
     initProviderUI();
+    
+    // Initial device list fetch
+    refreshAudioDevices();
 });
+
+async function refreshAudioDevices() {
+    if (!interviewAudioSourceSelect) return;
+    
+    const refreshBtn = document.getElementById('refresh-devices-btn');
+    if (refreshBtn) refreshBtn.classList.add('testing');
+
+    try {
+        const devices = await ipcRenderer.invoke('interview-get-devices');
+        
+        // Preserve current value if possible
+        const currentVal = settings.interviewAudioSource;
+        
+        // Clear and rebuild options
+        interviewAudioSourceSelect.innerHTML = `
+            <option value="auto">Auto</option>
+            <option value="mic">Microphone</option>
+            <option value="loopback">Default Loopback</option>
+        `;
+        
+        if (devices && devices.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = 'Specific Loopback Devices';
+            
+            devices.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.index;
+                opt.textContent = d.name;
+                group.appendChild(opt);
+            });
+            interviewAudioSourceSelect.appendChild(group);
+        }
+        
+        // Restore value
+        interviewAudioSourceSelect.value = currentVal;
+    } catch (e) {
+        console.error('Failed to fetch audio devices:', e);
+    } finally {
+        if (refreshBtn) {
+            setTimeout(() => refreshBtn.classList.remove('testing'), 500);
+        }
+    }
+}
 
 function setupEventListeners() {
     // Master toggle
@@ -119,9 +165,23 @@ function setupEventListeners() {
     // Interview audio source
     if (interviewAudioSourceSelect) {
         interviewAudioSourceSelect.addEventListener('change', () => {
-            settings.interviewAudioSource = interviewAudioSourceSelect.value || 'auto';
+            const val = interviewAudioSourceSelect.value;
+            // If it's a number string, parse it as int (device index)
+            if (/^\d+$/.test(val)) {
+                settings.interviewAudioSource = parseInt(val);
+            } else {
+                settings.interviewAudioSource = val || 'auto';
+            }
             saveSettings();
             ipcRenderer.send('settings-interview-audio-source', settings.interviewAudioSource);
+        });
+    }
+
+    // Refresh devices button
+    const refreshBtn = document.getElementById('refresh-devices-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshAudioDevices();
         });
     }
 

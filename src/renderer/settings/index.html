@@ -822,16 +822,19 @@
                                     <div class="toggle-thumb"></div>
                                 </label>
                             </div>
-                            <div class="setting-item">
+                            <div class="setting-item" style="grid-column: span 2;">
                                 <div class="setting-info">
                                     <span class="setting-label">Interview Audio Source</span>
-                                    <span class="setting-desc">Mic, loopback, or auto-select</span>
+                                    <span class="setting-desc">Mic, loopback, or specific device</span>
                                 </div>
-                                <select id="interview-audio-source" class="provider-select">
-                                    <option value="auto">Auto</option>
-                                    <option value="mic">Microphone</option>
-                                    <option value="loopback">Meeting Audio (Loopback)</option>
-                                </select>
+                                <div style="display: flex; gap: 8px; align-items: center; width: 220px;">
+                                    <select id="interview-audio-source" class="dropdown" style="flex: 1;">
+                                        <option value="auto">Auto</option>
+                                        <option value="mic">Microphone</option>
+                                        <option value="loopback">Meeting Audio (Loopback)</option>
+                                    </select>
+                                    <button id="refresh-devices-btn" class="test-btn" title="Refresh devices">↻</button>
+                                </div>
                             </div>
                             <div class="setting-item">
                                 <div class="setting-info">

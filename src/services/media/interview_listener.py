@@ -34,23 +34,73 @@ class InterviewListener:
         self.recognizer = sr.Recognizer()
         self.running = True
         self.listening_enabled = False
-        self.source_mode = "auto"  # auto | mic | loopback
+        self.source_mode = "auto"  # auto | mic | loopback | index (int)
+        self.device_index = None   # Specific index if source_mode is an index
         self.audio_queue = queue.Queue()
         self.listener_thread = None
         self.transcribe_thread = None
 
     def set_source(self, source):
-        if source in ("auto", "mic", "loopback"):
+        if isinstance(source, int):
+            self.source_mode = "index"
+            self.device_index = source
+        elif source in ("auto", "mic", "loopback"):
             self.source_mode = source
+            self.device_index = None
         else:
             self.source_mode = "auto"
+            self.device_index = None
 
-        if self.source_mode == "loopback" and not LOOPBACK_AVAILABLE:
+        if (self.source_mode == "loopback" or self.source_mode == "index") and not LOOPBACK_AVAILABLE:
             send({
                 "event": "error",
                 "message": "Loopback requested but pyaudiowpatch is unavailable. Falling back to microphone."
             })
             self.source_mode = "mic"
+            self.device_index = None
+
+    def list_devices(self):
+        """Enumerate available WASAPI loopback devices."""
+        if not LOOPBACK_AVAILABLE:
+            send({"event": "devices", "devices": []})
+            return
+
+        pa = None
+        try:
+            pa = pyaudio.PyAudio()
+            devices = []
+            
+            # On Windows with pyaudiowpatch, we look for loopback devices
+            try:
+                # get_default_wasapi_loopback check
+                default = pa.get_default_wasapi_loopback()
+                if default:
+                    devices.append({
+                        "index": default["index"],
+                        "name": f"Default Loopback: {default['name']}",
+                        "is_default": True
+                    })
+            except Exception:
+                pass
+
+            for i in range(pa.get_device_count()):
+                info = pa.get_device_info_by_index(i)
+                # Check if it's a loopback device (specific to pyaudiowpatch)
+                if info.get('isLoopbackDevice') or 'loopback' in info.get('name', '').lower():
+                    # Avoid duplicates with default if it's already there
+                    if not any(d['index'] == i for d in devices):
+                        devices.append({
+                            "index": i,
+                            "name": info.get('name'),
+                            "is_default": False
+                        })
+            
+            send({"event": "devices", "devices": devices})
+        except Exception as e:
+            send({"event": "error", "message": f"Failed to list devices: {e}"})
+        finally:
+            if pa:
+                pa.terminate()
 
     def start(self):
         if self.listening_enabled:
@@ -79,7 +129,7 @@ class InterviewListener:
         if not self.running:
             return
         try:
-            use_loopback = self.source_mode == "loopback" or (self.source_mode == "auto" and LOOPBACK_AVAILABLE)
+            use_loopback = self.source_mode in ("loopback", "index") or (self.source_mode == "auto" and LOOPBACK_AVAILABLE)
             if use_loopback:
                 audio = self._capture_loopback_phrase(duration_sec=6)
                 if audio:
@@ -101,7 +151,7 @@ class InterviewListener:
                 time.sleep(0.1)
                 continue
             try:
-                use_loopback = self.source_mode == "loopback" or (self.source_mode == "auto" and LOOPBACK_AVAILABLE)
+                use_loopback = self.source_mode in ("loopback", "index") or (self.source_mode == "auto" and LOOPBACK_AVAILABLE)
                 if use_loopback:
                     send({"event": "partial", "text": "Listening (meeting audio)..."})
                     audio = self._capture_loopback_phrase(duration_sec=8)
@@ -134,13 +184,23 @@ class InterviewListener:
         stream = None
         try:
             pa = pyaudio.PyAudio()
-            default_speakers = pa.get_default_wasapi_loopback()
-            if not default_speakers:
+            
+            target_device = None
+            if self.source_mode == "index" and self.device_index is not None:
+                try:
+                    target_device = pa.get_device_info_by_index(self.device_index)
+                except Exception:
+                    pass
+            
+            if not target_device:
+                target_device = pa.get_default_wasapi_loopback()
+                
+            if not target_device:
                 send({"event": "error", "message": "No loopback device found. Using microphone source is recommended."})
                 return None
 
-            channels = int(default_speakers.get("maxInputChannels") or 2)
-            rate = int(default_speakers.get("defaultSampleRate") or 48000)
+            channels = int(target_device.get("maxInputChannels") or 2)
+            rate = int(target_device.get("defaultSampleRate") or 48000)
             frames_per_buffer = 1024
 
             stream = pa.open(
@@ -148,7 +208,7 @@ class InterviewListener:
                 channels=channels,
                 rate=rate,
                 input=True,
-                input_device_index=default_speakers["index"],
+                input_device_index=target_device["index"],
                 frames_per_buffer=frames_per_buffer
             )
 
@@ -223,6 +283,8 @@ def main():
             listener.stop()
         elif cmd == "force":
             listener.force()
+        elif cmd == "get_devices":
+            listener.list_devices()
         elif cmd == "set_source":
             listener.set_source(payload.get("source", "auto"))
         elif cmd == "shutdown":
