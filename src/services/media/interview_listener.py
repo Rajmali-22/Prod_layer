@@ -52,9 +52,10 @@ class InterviewListener:
             self.device_index = None
 
         if (self.source_mode == "loopback" or self.source_mode == "index") and not LOOPBACK_AVAILABLE:
+            # Only send error if specifically requested via loopback/index
             send({
                 "event": "error",
-                "message": "Loopback requested but pyaudiowpatch is unavailable. Falling back to microphone."
+                "message": "WASAPI Loopback requires 'pyaudiowpatch' library. Install it with: pip install pyaudiowpatch"
             })
             self.source_mode = "mic"
             self.device_index = None
@@ -62,7 +63,7 @@ class InterviewListener:
     def list_devices(self):
         """Enumerate available WASAPI loopback devices."""
         if not LOOPBACK_AVAILABLE:
-            send({"event": "devices", "devices": []})
+            send({"event": "devices", "devices": [], "loopback_available": False})
             return
 
         pa = None
@@ -95,7 +96,7 @@ class InterviewListener:
                             "is_default": False
                         })
             
-            send({"event": "devices", "devices": devices})
+            send({"event": "devices", "devices": devices, "loopback_available": True})
         except Exception as e:
             send({"event": "error", "message": f"Failed to list devices: {e}"})
         finally:

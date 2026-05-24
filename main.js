@@ -776,7 +776,10 @@ function handleInterviewListenerEvent(event) {
 
   if (event.event === 'devices') {
     if (pendingBackendCallbacks['interview_devices']) {
-      pendingBackendCallbacks['interview_devices'](event.devices || []);
+      pendingBackendCallbacks['interview_devices']({
+        devices: event.devices || [],
+        loopbackAvailable: event.loopback_available !== false
+      });
       delete pendingBackendCallbacks['interview_devices'];
     }
     return;
@@ -2584,11 +2587,10 @@ ipcMain.on('settings-init-sync', (event, s) => {
     if (s.ultraHumanEnabled !== undefined) ultraHumanEnabled = s.ultraHumanEnabled;
     if (s.interviewModeEnabled !== undefined) {
       interviewModeEnabled = s.interviewModeEnabled;
-      if (interviewModeEnabled) {
-        startInterviewListener();
-        if (!interviewWindow || interviewWindow.isDestroyed()) createInterviewWindow();
-      } else {
-        stopInterviewListener();
+      // Note: We don't auto-start the listener here to avoid "always on" bugs.
+      // It will start when the user explicitly toggles it or uses the shortcut.
+      if (interviewModeEnabled && (!interviewWindow || interviewWindow.isDestroyed())) {
+        createInterviewWindow();
       }
     }
     if (s.interviewAudioSource !== undefined) {

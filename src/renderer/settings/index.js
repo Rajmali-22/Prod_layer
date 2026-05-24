@@ -66,7 +66,9 @@ async function refreshAudioDevices() {
     if (refreshBtn) refreshBtn.classList.add('testing');
 
     try {
-        const devices = await ipcRenderer.invoke('interview-get-devices');
+        const result = await ipcRenderer.invoke('interview-get-devices');
+        const devices = result?.devices || [];
+        const loopbackAvailable = result?.loopbackAvailable !== false;
         
         // Preserve current value if possible
         const currentVal = settings.interviewAudioSource;
@@ -75,7 +77,7 @@ async function refreshAudioDevices() {
         interviewAudioSourceSelect.innerHTML = `
             <option value="auto">Auto</option>
             <option value="mic">Microphone</option>
-            <option value="loopback">Default Loopback</option>
+            <option value="loopback">${loopbackAvailable ? 'Default Loopback' : 'Loopback (Unavailable)'}</option>
         `;
         
         if (devices && devices.length > 0) {
@@ -89,6 +91,11 @@ async function refreshAudioDevices() {
                 group.appendChild(opt);
             });
             interviewAudioSourceSelect.appendChild(group);
+        }
+        
+        // If current value is loopback but it's unavailable, show a warning
+        if ((currentVal === 'loopback' || typeof currentVal === 'number') && !loopbackAvailable) {
+            console.warn('Loopback is selected but unavailable on this system.');
         }
         
         // Restore value
