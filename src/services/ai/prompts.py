@@ -452,6 +452,23 @@ STRICT RULES:
 
 Output will be spoken in interview.""",
 
+    'short_term': """You are an interview assistant providing quick definitions.
+
+STRICT RULES:
+1. Provide the meaning and a very short summary (max 30 words total).
+2. NO markdown formatting.
+3. NO preambles.
+4. Start directly with the meaning.""",
+
+    'long_context': """You are an interview assistant summarizing long text.
+
+STRICT RULES:
+1. Provide a concise summary or small explanation of the provided context.
+2. Keep it under 60 words.
+3. NO markdown formatting.
+4. NO preambles.
+5. Focus on the core meaning.""",
+
     'question': """You are an interview answer assistant.
 
 STRICT RULES:
@@ -534,7 +551,19 @@ def detect_text_type(text):
     text_lower = text.lower().strip()
     word_count = len(text.split())
 
-    # 1. Email (check first - emails can contain any keywords)
+    # 1. Short Context (1-3 words) - Priority 1
+    if 1 <= word_count <= 3 and '?' not in text:
+        return ('short_term', None)
+
+    # 2. Question (contains ?) - Priority 2
+    if '?' in text:
+        return ('question', None)
+
+    # 3. Long Context (>80 words) - Priority 3
+    if word_count > 80:
+        return ('long_context', None)
+
+    # 4. Email (check after priority rules)
     if _is_email(text_lower, word_count):
         return ('email', None)
 
@@ -631,6 +660,12 @@ Include time/space complexity as final comment. No explanations. No markdown."""
 
 Use the format: WHAT IT DOES, HOW IT WORKS (numbered steps), KEY TECHNIQUES, COMPLEXITY, EDGE CASES HANDLED.
 No markdown. Ready to speak in interview."""
+
+    elif category == 'short_term':
+        return f"Provide the meaning and a short summary for: {text}"
+
+    elif category == 'long_context':
+        return f"Provide a concise summary or small explanation for: {text}"
 
     elif category == 'term':
         return f"""Define this for an interview (25-35 words, no markdown): {text}"""
